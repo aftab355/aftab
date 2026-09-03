@@ -17,6 +17,24 @@ const parseKey = k => { const [y, m, d] = k.split('-').map(Number); return new D
 const addDays = (k, n) => { const d = parseKey(k); d.setDate(d.getDate() + n); return keyOf(d); };
 const todayKey = () => keyOf(new Date());
 
+/* A day still in progress is not a deficit. Until this hour (local, 24-hour
+   clock) the current day is held out of the week's totals: at noon you have
+   eaten a third of your food and logged none of the afternoon's activity, so
+   the day reads as a ~3000 kcal deficit that hasn't happened yet.
+   Both halves of the day lag, and in opposite directions — targetOf() grows
+   with logged activity, so an unlogged afternoon drags the target down while
+   the unlogged dinner drags eaten down further. Holding the whole day out
+   until it's over drops both lags together.
+   Move this to change when today folds in: 0 counts today from midnight,
+   24 never counts it. */
+const SETTLE_HOUR = 21;
+const todaySettled = () => new Date().getHours() >= SETTLE_HOUR;
+const fmtHour = h => {
+  const d = new Date();
+  d.setHours(h, 0, 0, 0);
+  return d.toLocaleTimeString(undefined, { hour: 'numeric' });
+};
+
 function startOfWeek(k, weekStart) {
   const d = parseKey(k);
   const shift = (d.getDay() - weekStart + 7) % 7;
@@ -328,7 +346,16 @@ function renderWeek() {
   const days = weekDays();
   const t = todayKey();
   const rows = days.map(k => Object.assign({ key: k }, summaryOf(k)));
-  const counted = rows.filter(r => r.logged);
+  const logged = rows.filter(r => r.logged);
+
+  /* Hold today out of the four summary cards until it has settled. Past weeks
+     don't contain today, so this is a no-op the moment you page back.
+     All four cards move together: pulling today from Net alone would leave
+     Eaten − Target no longer equal to Net, which reads as a bug. The chart and
+     table below still show today in full — one short bar among seven reads as
+     a partial day, where a single aggregate number does not. */
+  const pending = !todaySettled() && logged.some(r => r.key === t) ? summaryOf(t) : null;
+  const counted = pending ? logged.filter(r => r.key !== t) : logged;
 
   const eaten = counted.reduce((s, r) => s + r.eaten, 0);
   const target = counted.reduce((s, r) => s + r.target, 0);
@@ -342,17 +369,34 @@ function renderWeek() {
     : parseKey(weekCursor).getFullYear();
   $('#nextWeek').disabled = weekCursor >= thisWeek;
 
-  $('#wkEaten').textContent = kcal(eaten);
-  $('#wkTarget').textContent = kcal(target);
+  $('#wkEaten').textContent = counted.length ? kcal(eaten) : '—';
+  $('#wkTarget').textContent = counted.length ? kcal(target) : '—';
 
+  /* Today may have been the only logged day, so an empty week is now reachable
+     without the user having logged nothing. Show a dash rather than a 0 that
+     would read as a day spent exactly on target. */
   const netCard = $('#wkNetCard');
-  netCard.classList.toggle('is-over', net > 0);
-  netCard.classList.toggle('is-under', net <= 0);
-  $('#wkNet').textContent = withSign(net);
-  $('#wkNetSub').textContent = net > 0 ? 'surplus this week' : 'deficit this week';
+  netCard.classList.toggle('is-over', counted.length > 0 && net > 0);
+  netCard.classList.toggle('is-under', counted.length > 0 && net <= 0);
+  $('#wkNet').textContent = counted.length ? withSign(net) : '—';
+  $('#wkNetSub').textContent = counted.length
+    ? (net > 0 ? 'surplus' : 'deficit') + (pending ? ' — excl. today' : ' this week')
+    : (pending ? 'today still going' : 'nothing logged');
 
   $('#wkAvg').textContent = counted.length ? kcal(eaten / counted.length) : '—';
-  $('#wkAvgSub').textContent = `over ${counted.length} logged day${counted.length === 1 ? '' : 's'}`;
+  $('#wkAvgSub').textContent = counted.length
+    ? `over ${counted.length} logged day${counted.length === 1 ? '' : 's'}`
+    : (pending ? 'today still going' : 'no logged days');
+
+  /* Today is excluded, not discarded — say what it holds and when it lands,
+     so the cards above don't look like they've lost the day's entries. */
+  const note = $('#wkPending');
+  note.hidden = !pending;
+  if (pending) {
+    note.textContent =
+      `Today so far: ${kcal(pending.eaten)} eaten / ${kcal(pending.target)} target` +
+      ` — joins the totals above at ${fmtHour(SETTLE_HOUR)}.`;
+  }
 
   renderChart(rows);
   renderWeekTable(rows);
