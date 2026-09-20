@@ -1,0 +1,30 @@
+## Static site, no build step — Netlify publishes the repo root as-is.
+[build]
+  publish = "."
+  command = ""
+
+## /api/sync is a Netlify Function backed by Netlify Blobs. It needs no
+## environment variables or add-ons; Blobs is wired up automatically for
+## deploys on Netlify.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+## The service worker must never be cached by the CDN or the browser: a stale
+## copy would block the update check it exists to perform.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    X-Frame-Options = "SAMEORIGIN"

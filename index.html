@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111318">
+<title>Calorie Tracker</title>
+<meta name="description" content="Log meals, track daily and weekly calories, and see deficit or surplus using your Samsung Health activity calories.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%A5%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <h1 class="brand">Calorie&nbsp;Tracker</h1>
+    <nav class="tabs" role="tablist">
+      <button class="tab" role="tab" data-view="today" aria-selected="true">Today</button>
+      <button class="tab" role="tab" data-view="week" aria-selected="false">Week</button>
+      <button class="tab" role="tab" data-view="settings" aria-selected="false">Settings</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ─────────────────────────────  TODAY  ───────────────────────────── -->
+  <section id="view-today" class="view">
+
+    <div class="daynav card">
+      <button class="iconbtn" id="prevDay" aria-label="Previous day">&#8249;</button>
+      <div class="daynav-label">
+        <input type="date" id="datePicker" aria-label="Selected date">
+        <span class="daynav-rel" id="dayRelative"></span>
+      </div>
+      <button class="iconbtn" id="nextDay" aria-label="Next day">&#8250;</button>
+    </div>
+
+    <!-- Headline balance -->
+    <div class="card balance" id="balanceCard">
+      <div class="balance-verdict">
+        <span class="balance-num" id="balanceNum">0</span>
+        <span class="balance-word" id="balanceWord">to go</span>
+      </div>
+      <div class="bar" role="img" aria-label="Calories consumed against target">
+        <div class="bar-fill" id="barFill"></div>
+      </div>
+      <div class="balance-math" id="balanceMath"></div>
+    </div>
+
+    <!-- Activity -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Activity burn</h2>
+        <span class="pill" id="activitySource">not set</span>
+      </div>
+      <div class="field-row">
+        <label class="field">
+          <span>Active calories (Samsung Health)</span>
+          <input type="number" id="activityInput" inputmode="numeric" min="0" step="1" placeholder="0">
+        </label>
+        <div class="field-note" id="activityNote"></div>
+      </div>
+    </div>
+
+    <!-- Add entry -->
+    <div class="card">
+      <div class="card-head"><h2>Add food</h2></div>
+      <form id="addForm" class="addform" autocomplete="off">
+        <input type="text" id="fName" placeholder="Meal or item" required aria-label="Meal or item name" list="favourites">
+        <datalist id="favourites"></datalist>
+        <input type="number" id="fCals" placeholder="kcal" inputmode="numeric" min="0" step="1" required aria-label="Calories">
+        <input type="number" id="fQty" value="1" min="0.25" step="0.25" inputmode="decimal" aria-label="Servings" title="Servings">
+        <button type="submit" class="btn primary">Add</button>
+      </form>
+      <div class="quickadd" id="quickAdd"></div>
+    </div>
+
+    <!-- Entries -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Logged today</h2>
+        <span class="pill" id="entryTotal">0 kcal</span>
+      </div>
+      <ul class="entries" id="entryList"></ul>
+      <p class="empty" id="entryEmpty">Nothing logged yet.</p>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────  WEEK  ───────────────────────────── -->
+  <section id="view-week" class="view" hidden>
+
+    <div class="daynav card">
+      <button class="iconbtn" id="prevWeek" aria-label="Previous week">&#8249;</button>
+      <div class="daynav-label"><strong id="weekLabel"></strong><span class="daynav-rel" id="weekRelative"></span></div>
+      <button class="iconbtn" id="nextWeek" aria-label="Next week">&#8250;</button>
+    </div>
+
+    <div class="stats">
+      <div class="card stat"><span class="stat-label">Eaten</span><strong class="stat-val" id="wkEaten">0</strong><span class="stat-sub">kcal this week</span></div>
+      <div class="card stat"><span class="stat-label">Target</span><strong class="stat-val" id="wkTarget">0</strong><span class="stat-sub">kcal allowance</span></div>
+      <div class="card stat" id="wkNetCard"><span class="stat-label">Net</span><strong class="stat-val" id="wkNet">0</strong><span class="stat-sub" id="wkNetSub">balance</span></div>
+      <div class="card stat"><span class="stat-label">Avg / day</span><strong class="stat-val" id="wkAvg">0</strong><span class="stat-sub" id="wkAvgSub">logged days</span></div>
+    </div>
+
+    <p class="wk-note" id="wkPending" hidden></p>
+
+    <div class="card">
+      <div class="card-head"><h2>Daily breakdown</h2><span class="pill legend"><i class="sw-eat"></i>eaten <i class="sw-tgt"></i>target</span></div>
+      <div class="chart" id="weekChart"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Week table</h2></div>
+      <div class="tablewrap">
+        <table class="wktable">
+          <thead><tr><th>Day</th><th>Eaten</th><th>Activity</th><th>Target</th><th>Balance</th></tr></thead>
+          <tbody id="weekTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────  SETTINGS  ───────────────────────────── -->
+  <section id="view-settings" class="view" hidden>
+
+    <div class="card">
+      <div class="card-head"><h2>Calorie model</h2></div>
+      <label class="field">
+        <span>Base calories (maintenance before activity)</span>
+        <input type="number" id="setBase" min="0" step="10" inputmode="numeric">
+      </label>
+      <label class="field">
+        <span>Activity multiplier</span>
+        <input type="number" id="setMult" min="0" max="2" step="0.05" inputmode="decimal">
+      </label>
+      <label class="field">
+        <span>Week starts on</span>
+        <select id="setWeekStart">
+          <option value="1">Monday</option>
+          <option value="0">Sunday</option>
+        </select>
+      </label>
+      <p class="formula">Target = <b id="fBase">2600</b> + <b id="fMult">0.75</b> &times; active&nbsp;calories</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Samsung Health import</h2></div>
+      <p class="explain">
+        Samsung Health has no public web API, so a website cannot pull from it directly.
+        Export your data instead &mdash; <b>Samsung Health &rarr; Settings &rarr; Personal data &rarr;
+        Download personal data</b> &mdash; unzip it, and drop the calorie or step CSV below.
+        You will see a preview and can fix any number before it is saved.
+      </p>
+      <div class="drop" id="dropZone" tabindex="0" role="button" aria-label="Choose or drop a Samsung Health CSV file">
+        <strong>Drop CSV here</strong>
+        <span>or tap to choose a file</span>
+        <input type="file" id="fileInput" accept=".csv,text/csv" hidden>
+      </div>
+      <div id="importResult"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Sync across devices</h2>
+        <span class="pill" id="syncBadge">off</span>
+      </div>
+
+      <div id="syncOff">
+        <p class="explain">
+          Your log is saved in this browser and survives refreshing, closing the tab and going offline.
+          Turn on sync to also keep it on the server, so the same log opens on your phone and your laptop
+          &mdash; and survives clearing your browser data.
+        </p>
+        <p class="explain">
+          There is no account. Pick a passphrase; it is stretched on this device and only the derived key
+          is sent, so the server never sees it. <b>Nobody can reset it &mdash; if you forget it, that data is
+          gone.</b> Use the same passphrase on your other device to pair them.
+        </p>
+        <form id="syncForm" class="btnrow" autocomplete="on">
+          <input type="password" id="syncPass" placeholder="Passphrase (8+ characters)"
+                 autocomplete="current-password" aria-label="Sync passphrase" style="flex:1;min-width:180px">
+          <button type="submit" class="btn primary">Turn on sync</button>
+        </form>
+      </div>
+
+      <div id="syncOn" hidden>
+        <p class="explain">Sync is on. Changes upload a moment after you make them, and this device pulls
+          anything new whenever you return to the tab.</p>
+        <div class="btnrow">
+          <button class="btn" id="syncNowBtn">Sync now</button>
+          <button class="btn" id="syncOffBtn">Turn off on this device</button>
+        </div>
+      </div>
+
+      <div class="note ok" id="syncStatus" hidden></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Your data</h2></div>
+      <p class="explain">A backup file is worth keeping regardless of sync &mdash; it is the only copy you hold yourself, and the only way back if you forget your sync passphrase.</p>
+      <div class="btnrow">
+        <button class="btn" id="exportBtn">Export backup</button>
+        <button class="btn" id="importBtn">Restore backup</button>
+        <input type="file" id="restoreInput" accept=".json,application/json" hidden>
+        <button class="btn danger" id="wipeBtn">Erase everything</button>
+      </div>
+      <div id="dataMsg"></div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
