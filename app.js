@@ -45,7 +45,7 @@ const todaySettled = () => new Date().getHours() >= SETTLE_HOUR;
 const fmtHour = h => {
   const d = new Date();
   d.setHours(h, 0, 0, 0);
-  return d.toLocaleTimeString(undefined, { hour: 'numeric' });
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 };
 
 function startOfWeek(k, weekStart) {
@@ -136,8 +136,8 @@ const targetOf = () => state.settings.dailyTarget;
 function summaryOf(k) {
   const eaten = eatenOf(k), target = targetOf();
   const active = activeCalsOf(k);
-  const net = eaten - state.settings.maintenance - active;
-  return { eaten, target, active, balance: eaten - target, net, logged: dayOf(k).entries.length > 0 };
+  const burned = state.settings.maintenance + active;
+  return { eaten, target, active, burned, balance: eaten - target, net: eaten - burned, logged: dayOf(k).entries.length > 0 };
 }
 
 const round = n => Math.round(n);
@@ -377,15 +377,20 @@ function renderWeek() {
   /* Hold today out of the four summary cards until it has settled. Past weeks
      don't contain today, so this is a no-op the moment you page back.
      All four cards move together: pulling today from Net alone would leave
-     Eaten − Target no longer equal to Net, which reads as a bug. The chart and
+     Eaten − Burned no longer equal to Net, which reads as a bug. The chart and
      table below still show today in full — one short bar among seven reads as
      a partial day, where a single aggregate number does not. */
   const pending = !todaySettled() && logged.some(r => r.key === t) ? summaryOf(t) : null;
   const counted = pending ? logged.filter(r => r.key !== t) : logged;
 
+  /* The week tracks the real energy balance: eaten − (maintenance + activity).
+     The fixed target is a daily eating habit, not the measure of the week —
+     eating 2,800 on a day you burned 1,400 extra is a deficit, not a surplus.
+     Adherence to the target is shown under the average instead. */
   const eaten = counted.reduce((s, r) => s + r.eaten, 0);
-  const target = counted.reduce((s, r) => s + r.target, 0);
-  const net = eaten - target;
+  const burned = counted.reduce((s, r) => s + r.burned, 0);
+  const active = counted.reduce((s, r) => s + r.active, 0);
+  const net = eaten - burned;
 
   const thisWeek = startOfWeek(t, state.settings.weekStart);
   $('#weekLabel').textContent = `${fmtShort(days[0])} – ${fmtShort(days[6])}`;
@@ -396,10 +401,10 @@ function renderWeek() {
   $('#nextWeek').disabled = weekCursor >= thisWeek;
 
   $('#wkEaten').textContent = counted.length ? kcal(eaten) : '—';
-  $('#wkTarget').textContent = counted.length ? kcal(target) : '—';
-  $('#wkTargetSub').textContent = counted.length
-    ? `${kcal(state.settings.dailyTarget)} × ${counted.length} day${counted.length === 1 ? '' : 's'}`
-    : `${kcal(state.settings.dailyTarget)} per logged day`;
+  $('#wkBurned').textContent = counted.length ? kcal(burned) : '—';
+  $('#wkBurnedSub').textContent = counted.length
+    ? `${kcal(state.settings.maintenance)} × ${counted.length} + ${kcal(active)} activity`
+    : 'maintenance + activity';
 
   /* Today may have been the only logged day, so an empty week is now reachable
      without the user having logged nothing. Show a dash rather than a 0 that
@@ -413,8 +418,9 @@ function renderWeek() {
     : (pending ? 'today still going' : 'nothing logged');
 
   $('#wkAvg').textContent = counted.length ? kcal(eaten / counted.length) : '—';
+  const vsTarget = counted.length ? eaten / counted.length - state.settings.dailyTarget : 0;
   $('#wkAvgSub').textContent = counted.length
-    ? `over ${counted.length} logged day${counted.length === 1 ? '' : 's'}`
+    ? `eaten · ${withSign(vsTarget)} vs ${kcal(state.settings.dailyTarget)} target`
     : (pending ? 'today still going' : 'no logged days');
 
   /* Today is excluded, not discarded — say what it holds and when it lands,
@@ -423,7 +429,7 @@ function renderWeek() {
   note.hidden = !pending;
   if (pending) {
     note.textContent =
-      `Today so far: ${kcal(pending.eaten)} eaten / ${kcal(pending.target)} target` +
+      `Today so far: ${kcal(pending.eaten)} eaten, ${kcal(pending.active)} activity` +
       ` — joins the totals above at ${fmtHour(SETTLE_HOUR)}.`;
   }
 
@@ -435,16 +441,17 @@ function renderChart(rows) {
   const chart = $('#weekChart');
   chart.textContent = '';
 
-  // Scale to whichever is larger — the biggest day eaten or the biggest target —
-  // so the dashed target line is always on-canvas.
-  const peak = Math.max(1, ...rows.map(r => Math.max(r.eaten, r.logged ? r.target : 0)));
+  // Bars are eaten; the dashed line is that day's burn (maintenance + activity),
+  // so a bar under its line is a real deficit day. Scale to whichever is
+  // larger so the line is always on-canvas.
+  const peak = Math.max(1, ...rows.map(r => Math.max(r.eaten, r.logged ? r.burned : 0)));
   const t = todayKey();
 
   rows.forEach(r => {
     const col = el('div', 'col');
-    col.classList.toggle('over', r.balance > 0 && r.logged);
+    col.classList.toggle('over', r.net > 0 && r.logged);
     col.title = r.logged
-      ? `${fmtLong(r.key)} — ${kcal(r.eaten)} eaten / ${kcal(r.target)} target (${withSign(r.balance)})`
+      ? `${fmtLong(r.key)} — ${kcal(r.eaten)} eaten / ${kcal(r.burned)} burned (${withSign(r.net)})`
       : `${fmtLong(r.key)} — nothing logged`;
 
     const bars = el('div', 'col-bars');
@@ -455,7 +462,7 @@ function renderChart(rows) {
 
     if (r.logged) {
       const line = el('div', 'col-target');
-      line.style.bottom = ((r.target / peak) * 100) + '%';
+      line.style.bottom = ((r.burned / peak) * 100) + '%';
       bars.append(line);
     }
 
@@ -490,8 +497,8 @@ function renderWeekTable(rows) {
 
     const bal = el('td');
     if (r.logged) {
-      bal.className = r.balance > 0 ? 'pos' : 'neg';
-      bal.textContent = withSign(r.balance);
+      bal.className = r.net > 0 ? 'pos' : 'neg';
+      bal.textContent = withSign(r.net);
     } else {
       bal.textContent = '—';
     }
