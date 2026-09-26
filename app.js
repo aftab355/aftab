@@ -4,7 +4,7 @@
 'use strict';
 
 const KEY = 'calorie-tracker/v1';
-const DEFAULTS = { dailyTarget: 2550, maintenance: 2600, weekActivityFactor: 0.75, weekStart: 1 };
+const DEFAULTS = { dailyTarget: 2550, maintenance: 2600, activityFactor: 0.75, weekStart: 1 };
 
 /* The target is one fixed number. Older saves (and older devices still
    syncing) carry baseCalories/activityMultiplier from when the target grew
@@ -13,12 +13,12 @@ function cleanSettings(s) {
   const src = s && typeof s === 'object' ? s : {};
   const t = Number(src.dailyTarget);
   const m = Number(src.maintenance);
-  const f = Number(src.weekActivityFactor);
+  const f = Number(src.activityFactor);
   const w = Number(src.weekStart);
   return {
     dailyTarget: Number.isFinite(t) && t > 0 ? t : DEFAULTS.dailyTarget,
     maintenance: Number.isFinite(m) && m > 0 ? m : DEFAULTS.maintenance,
-    weekActivityFactor: Number.isFinite(f) && f >= 0 && f <= 2 ? f : DEFAULTS.weekActivityFactor,
+    activityFactor: Number.isFinite(f) && f >= 0 && f <= 2 ? f : DEFAULTS.activityFactor,
     weekStart: w === 0 || w === 1 ? w : DEFAULTS.weekStart
   };
 }
@@ -125,14 +125,12 @@ function mutateDay(k, fn) {
 /* ─────────────────────────  the calorie model  ─────────────────────────
    target  = fixed daily target (Settings) — activity never moves it
    balance = eaten − target   (positive = surplus, negative = deficit)
-   net     = eaten − (maintenance + activity)
-   The target is what you aim to eat. Net is the day's true energy balance,
-   shown as secondary information — it never feeds back into the target.
-
-   The Week view uses the original, more conservative allowance instead:
-   weekAllowance = maintenance + factor × activity   (factor defaults to 0.75)
-   weekNet       = eaten − weekAllowance
-   Discounting activity allows for wearables overestimating burn. */
+   allowance = maintenance + factor × activity   (factor defaults to 0.75)
+   net       = eaten − allowance
+   The target is what you aim to eat. Net is the energy balance, shown as
+   secondary information on Today and as the headline of the Week view — it
+   never feeds back into the target. Only part of activity counts because
+   wearables overestimate burn and maintenance already covers some movement. */
 function activeCalsOf(k) {
   const a = dayOf(k).activity;
   return a && Number.isFinite(a.calories) ? Math.max(0, a.calories) : 0;
@@ -143,11 +141,10 @@ const targetOf = () => state.settings.dailyTarget;
 function summaryOf(k) {
   const eaten = eatenOf(k), target = targetOf();
   const active = activeCalsOf(k);
-  const burned = state.settings.maintenance + active;
-  const allowance = state.settings.maintenance + state.settings.weekActivityFactor * active;
+  const allowance = state.settings.maintenance + state.settings.activityFactor * active;
   return {
-    eaten, target, active, burned, allowance,
-    balance: eaten - target, net: eaten - burned, weekNet: eaten - allowance,
+    eaten, target, active, allowance,
+    balance: eaten - target, net: eaten - allowance,
     logged: dayOf(k).entries.length > 0
   };
 }
@@ -207,7 +204,8 @@ function renderToday() {
   netEl.textContent = `${kcal(Math.abs(s.net))} ${s.net > 0 ? 'surplus' : 'deficit'}`;
   $('#dayActive').textContent = kcal(s.active);
   $('#dayNetMath').textContent =
-    `${kcal(s.eaten)} eaten − (${kcal(state.settings.maintenance)} maintenance + ${kcal(s.active)} activity)`;
+    `${kcal(s.eaten)} eaten − (${kcal(state.settings.maintenance)} maintenance + ` +
+    `${state.settings.activityFactor} × ${kcal(s.active)} activity)`;
 
   // Activity
   const act = dayOf(cursor).activity;
@@ -412,7 +410,7 @@ function renderWeek() {
   $('#nextWeek').disabled = weekCursor >= thisWeek;
 
   $('#wkEaten').textContent = counted.length ? kcal(eaten) : '—';
-  const factor = state.settings.weekActivityFactor;
+  const factor = state.settings.activityFactor;
   $('#wkBurned').textContent = counted.length ? kcal(allowance) : '—';
   $('#wkBurnedSub').textContent = counted.length
     ? `${kcal(state.settings.maintenance)} × ${counted.length} + ${factor} × ${kcal(active)} activity`
@@ -461,9 +459,9 @@ function renderChart(rows) {
 
   rows.forEach(r => {
     const col = el('div', 'col');
-    col.classList.toggle('over', r.weekNet > 0 && r.logged);
+    col.classList.toggle('over', r.net > 0 && r.logged);
     col.title = r.logged
-      ? `${fmtLong(r.key)} — ${kcal(r.eaten)} eaten / ${kcal(r.allowance)} allowance (${withSign(r.weekNet)})`
+      ? `${fmtLong(r.key)} — ${kcal(r.eaten)} eaten / ${kcal(r.allowance)} allowance (${withSign(r.net)})`
       : `${fmtLong(r.key)} — nothing logged`;
 
     const bars = el('div', 'col-bars');
@@ -509,8 +507,8 @@ function renderWeekTable(rows) {
 
     const bal = el('td');
     if (r.logged) {
-      bal.className = r.weekNet > 0 ? 'pos' : 'neg';
-      bal.textContent = withSign(r.weekNet);
+      bal.className = r.net > 0 ? 'pos' : 'neg';
+      bal.textContent = withSign(r.net);
     } else {
       bal.textContent = '—';
     }
@@ -894,7 +892,7 @@ function renderSyncPanel() {
 function renderSettings() {
   $('#setTarget').value = state.settings.dailyTarget;
   $('#setMaint').value = state.settings.maintenance;
-  $('#setFactor').value = state.settings.weekActivityFactor;
+  $('#setFactor').value = state.settings.activityFactor;
   $('#setWeekStart').value = String(state.settings.weekStart);
 }
 
@@ -1023,7 +1021,7 @@ $('#setMaint').onchange = e => {
 };
 $('#setFactor').onchange = e => {
   const v = Number(e.target.value);
-  if (Number.isFinite(v) && v >= 0 && v <= 2) { state.settings.weekActivityFactor = v; state.settingsU = Date.now(); save(); queuePush(); }
+  if (Number.isFinite(v) && v >= 0 && v <= 2) { state.settings.activityFactor = v; state.settingsU = Date.now(); save(); queuePush(); }
   render();
 };
 $('#setWeekStart').onchange = e => {
