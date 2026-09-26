@@ -83,8 +83,14 @@ body{
 .bar{position:relative;height:9px;border-radius:99px;background:var(--line-soft);margin:14px 0 10px;overflow:hidden}
 .bar-fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--good);border-radius:99px;transition:width .3s ease,background .2s}
 .balance.is-over .bar-fill{background:var(--over)}
-.balance-math{font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
-.balance-math b{color:var(--ink);font-weight:620}
+.sumrow{display:flex;align-items:flex-end;justify-content:center;gap:10px;font-variant-numeric:tabular-nums}
+.sumrow>div:not(.sum-op){display:flex;flex-direction:column;align-items:center;min-width:64px}
+.sum-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);font-weight:620}
+.sumrow strong{font-size:18px;font-weight:680;color:var(--ink)}
+.sum-op{font-size:16px;color:var(--ink-3);padding-bottom:2px}
+.balance.is-under #sumLeft{color:var(--good)}
+.balance.is-over  #sumLeft{color:var(--over)}
+.h2-note{font-weight:500;color:var(--ink-3);font-size:.8em}
 
 /* ---------- fields ---------- */
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}

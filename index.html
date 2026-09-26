@@ -41,18 +41,24 @@
     <div class="card balance" id="balanceCard">
       <div class="balance-verdict">
         <span class="balance-num" id="balanceNum">0</span>
-        <span class="balance-word" id="balanceWord">to go</span>
+        <span class="balance-word" id="balanceWord">kcal left to eat</span>
       </div>
-      <div class="bar" role="img" aria-label="Calories consumed against target">
+      <div class="bar" role="img" aria-label="Calories eaten against daily target">
         <div class="bar-fill" id="barFill"></div>
       </div>
-      <div class="balance-math" id="balanceMath"></div>
+      <div class="sumrow">
+        <div><span class="sum-label">Target</span><strong id="sumTarget">0</strong></div>
+        <div class="sum-op">&minus;</div>
+        <div><span class="sum-label">Eaten</span><strong id="sumEaten">0</strong></div>
+        <div class="sum-op">=</div>
+        <div><span class="sum-label" id="sumLeftLabel">Left</span><strong id="sumLeft">0</strong></div>
+      </div>
     </div>
 
     <!-- Activity -->
     <div class="card">
       <div class="card-head">
-        <h2>Activity burn</h2>
+        <h2>Activity <span class="h2-note">(reference only)</span></h2>
         <span class="pill" id="activitySource">not set</span>
       </div>
       <div class="field-row">
@@ -99,7 +105,7 @@
 
     <div class="stats">
       <div class="card stat"><span class="stat-label">Eaten</span><strong class="stat-val" id="wkEaten">0</strong><span class="stat-sub">kcal this week</span></div>
-      <div class="card stat"><span class="stat-label">Target</span><strong class="stat-val" id="wkTarget">0</strong><span class="stat-sub">kcal allowance</span></div>
+      <div class="card stat"><span class="stat-label">Target</span><strong class="stat-val" id="wkTarget">0</strong><span class="stat-sub" id="wkTargetSub">per logged day</span></div>
       <div class="card stat" id="wkNetCard"><span class="stat-label">Net</span><strong class="stat-val" id="wkNet">0</strong><span class="stat-sub" id="wkNetSub">balance</span></div>
       <div class="card stat"><span class="stat-label">Avg / day</span><strong class="stat-val" id="wkAvg">0</strong><span class="stat-sub" id="wkAvgSub">logged days</span></div>
     </div>
@@ -115,7 +121,7 @@
       <div class="card-head"><h2>Week table</h2></div>
       <div class="tablewrap">
         <table class="wktable">
-          <thead><tr><th>Day</th><th>Eaten</th><th>Activity</th><th>Target</th><th>Balance</th></tr></thead>
+          <thead><tr><th>Day</th><th>Eaten</th><th>Activity</th><th>Balance</th></tr></thead>
           <tbody id="weekTableBody"></tbody>
         </table>
       </div>
@@ -126,14 +132,10 @@
   <section id="view-settings" class="view" hidden>
 
     <div class="card">
-      <div class="card-head"><h2>Calorie model</h2></div>
+      <div class="card-head"><h2>Daily target</h2></div>
       <label class="field">
-        <span>Base calories (maintenance before activity)</span>
-        <input type="number" id="setBase" min="0" step="10" inputmode="numeric">
-      </label>
-      <label class="field">
-        <span>Activity multiplier</span>
-        <input type="number" id="setMult" min="0" max="2" step="0.05" inputmode="decimal">
+        <span>Target calories per day</span>
+        <input type="number" id="setTarget" min="1" step="10" inputmode="numeric">
       </label>
       <label class="field">
         <span>Week starts on</span>
@@ -142,7 +144,7 @@
           <option value="0">Sunday</option>
         </select>
       </label>
-      <p class="formula">Target = <b id="fBase">2600</b> + <b id="fMult">0.75</b> &times; active&nbsp;calories</p>
+      <p class="formula">Same target every day. Activity you log is shown for reference and never changes it.</p>
     </div>
 
     <div class="card">

@@ -4,7 +4,20 @@
 'use strict';
 
 const KEY = 'calorie-tracker/v1';
-const DEFAULTS = { baseCalories: 2600, activityMultiplier: 0.75, weekStart: 1 };
+const DEFAULTS = { dailyTarget: 2550, weekStart: 1 };
+
+/* The target is one fixed number. Older saves (and older devices still
+   syncing) carry baseCalories/activityMultiplier from when the target grew
+   with activity; those are dropped here so the goal can't drift back. */
+function cleanSettings(s) {
+  const src = s && typeof s === 'object' ? s : {};
+  const t = Number(src.dailyTarget);
+  const w = Number(src.weekStart);
+  return {
+    dailyTarget: Number.isFinite(t) && t > 0 ? t : DEFAULTS.dailyTarget,
+    weekStart: w === 0 || w === 1 ? w : DEFAULTS.weekStart
+  };
+}
 
 /* ─────────────────────────  dates  ─────────────────────────
    Everything is keyed on the *local* calendar day (YYYY-MM-DD).
@@ -21,10 +34,8 @@ const todayKey = () => keyOf(new Date());
    clock) the current day is held out of the week's totals: at noon you have
    eaten a third of your food and logged none of the afternoon's activity, so
    the day reads as a ~3000 kcal deficit that hasn't happened yet.
-   Both halves of the day lag, and in opposite directions — targetOf() grows
-   with logged activity, so an unlogged afternoon drags the target down while
-   the unlogged dinner drags eaten down further. Holding the whole day out
-   until it's over drops both lags together.
+   Holding the whole day out until it's over keeps a half-eaten day from
+   reading as a finished one.
    Move this to change when today folds in: 0 counts today from midnight,
    24 never counts it. */
 const SETTLE_HOUR = 21;
@@ -69,7 +80,7 @@ function load() {
   const s = raw && typeof raw === 'object' ? raw : {};
   return {
     version: 1,
-    settings: Object.assign({}, DEFAULTS, s.settings),
+    settings: cleanSettings(s.settings),
     settingsU: Number(s.settingsU) || 0,
     days: (s.days && typeof s.days === 'object') ? s.days : {}
   };
@@ -108,17 +119,18 @@ function mutateDay(k, fn) {
 }
 
 /* ─────────────────────────  the calorie model  ─────────────────────────
-   target = base + multiplier × activeCalories
-   balance = eaten − target   (positive = surplus, negative = deficit) */
+   target  = fixed daily target (Settings) — activity never moves it
+   balance = eaten − target   (positive = surplus, negative = deficit)
+   Activity calories are recorded and shown for reference only. */
 function activeCalsOf(k) {
   const a = dayOf(k).activity;
   return a && Number.isFinite(a.calories) ? Math.max(0, a.calories) : 0;
 }
 const eatenOf = k => dayOf(k).entries.reduce((sum, e) => sum + e.calories * (e.qty || 1), 0);
-const targetOf = k => state.settings.baseCalories + state.settings.activityMultiplier * activeCalsOf(k);
+const targetOf = () => state.settings.dailyTarget;
 
 function summaryOf(k) {
-  const eaten = eatenOf(k), target = targetOf(k);
+  const eaten = eatenOf(k), target = targetOf();
   return { eaten, target, active: activeCalsOf(k), balance: eaten - target, logged: dayOf(k).entries.length > 0 };
 }
 
@@ -158,25 +170,25 @@ function renderToday() {
   card.classList.toggle('is-over', over);
   card.classList.toggle('is-under', !over);
   $('#balanceNum').textContent = kcal(Math.abs(s.balance));
-  $('#balanceWord').textContent = over ? 'over — surplus' : 'left — deficit so far';
+  $('#balanceWord').textContent = over ? 'kcal over target' : 'kcal left to eat';
 
   // One bar: how much of the day's allowance is gone. It fills and turns red
   // rather than growing past the track, which would need a shifting scale.
   const pct = s.target > 0 ? Math.min(100, (s.eaten / s.target) * 100) : 0;
   $('#barFill').style.width = pct + '%';
 
-  $('#balanceMath').innerHTML =
-    `<b>${kcal(s.eaten)}</b> eaten &nbsp;·&nbsp; target <b>${kcal(s.target)}</b> ` +
-    `<span style="opacity:.7">(${kcal(state.settings.baseCalories)} + ` +
-    `${state.settings.activityMultiplier} × ${kcal(s.active)})</span>`;
+  $('#sumTarget').textContent = kcal(s.target);
+  $('#sumEaten').textContent = kcal(s.eaten);
+  $('#sumLeftLabel').textContent = over ? 'Over' : 'Left';
+  $('#sumLeft').textContent = kcal(Math.abs(s.balance));
 
   // Activity
   const act = dayOf(cursor).activity;
   $('#activityInput').value = act ? act.calories : '';
   $('#activitySource').textContent = !act ? 'not set' : (act.source === 'samsung' ? 'Samsung Health' : 'manual');
   $('#activityNote').textContent = act
-    ? `Counts as ${kcal(state.settings.activityMultiplier * act.calories)} kcal of extra allowance.`
-    : 'Import a Samsung Health CSV in Settings, or type it in.';
+    ? `For reference only — your target stays ${kcal(s.target)}.`
+    : 'For reference only — it does not change your target.';
 
   renderEntries();
   renderQuickAdd();
@@ -336,7 +348,7 @@ function setActivity(cals, source) {
 
 /* ─────────────────────────  week view  ─────────────────────────
    A week only counts days you actually logged. Otherwise every future day
-   in the current week reads as a 2600 kcal deficit and the weekly number
+   in the current week reads as a full-target deficit and the weekly number
    is nonsense by Tuesday. */
 function weekDays() {
   return Array.from({ length: 7 }, (_, i) => addDays(weekCursor, i));
@@ -371,6 +383,9 @@ function renderWeek() {
 
   $('#wkEaten').textContent = counted.length ? kcal(eaten) : '—';
   $('#wkTarget').textContent = counted.length ? kcal(target) : '—';
+  $('#wkTargetSub').textContent = counted.length
+    ? `${kcal(state.settings.dailyTarget)} × ${counted.length} day${counted.length === 1 ? '' : 's'}`
+    : `${kcal(state.settings.dailyTarget)} per logged day`;
 
   /* Today may have been the only logged day, so an empty week is now reachable
      without the user having logged nothing. Show a dash rather than a 0 that
@@ -456,8 +471,7 @@ function renderWeekTable(rows) {
     tr.append(
       day,
       el('td', null, r.logged ? kcal(r.eaten) : '—'),
-      el('td', null, r.active ? kcal(r.active) : '—'),
-      el('td', null, r.logged ? kcal(r.target) : '—')
+      el('td', null, r.active ? kcal(r.active) : '—')
     );
 
     const bal = el('td');
@@ -557,7 +571,7 @@ function extractActivity(text, filename) {
     /^day_time$/, /^date$/, /^day$/, /start_time/, /^create_time$/, /time/
   ]);
   // Prefer an explicit "active" calorie column; never pick BMR/rest/TEF, which
-  // are the baseline burn the 2600 already covers.
+  // are baseline burn rather than activity.
   const reject = /rest|basal|bmr|tef|goal|target/;
   const calIdx = pickColumn(header, [
     /active_calorie/, /calorie.*active/, /^active_cal/, /^calorie$/, /^calories$/, /calorie/
@@ -738,7 +752,7 @@ function mergeStates(local, remote) {
   const localNewer = (local.settingsU || 0) >= (remote.settingsU || 0);
   return {
     version: 1,
-    settings: Object.assign({}, DEFAULTS, localNewer ? local.settings : remote.settings),
+    settings: cleanSettings(localNewer ? local.settings : remote.settings),
     settingsU: Math.max(local.settingsU || 0, remote.settingsU || 0),
     days
   };
@@ -845,11 +859,8 @@ function renderSyncPanel() {
 
 /* ─────────────────────────  settings & backup  ───────────────────────── */
 function renderSettings() {
-  $('#setBase').value = state.settings.baseCalories;
-  $('#setMult').value = state.settings.activityMultiplier;
+  $('#setTarget').value = state.settings.dailyTarget;
   $('#setWeekStart').value = String(state.settings.weekStart);
-  $('#fBase').textContent = kcal(state.settings.baseCalories);
-  $('#fMult').textContent = state.settings.activityMultiplier;
 }
 
 function exportBackup() {
@@ -876,7 +887,7 @@ function restoreBackup(file) {
       if (!confirm(`Replace everything currently stored with this backup (${days} days)?`)) return;
       state = {
         version: 1,
-        settings: Object.assign({}, DEFAULTS, parsed.settings),
+        settings: cleanSettings(parsed.settings),
         settingsU: Date.now(),
         days: parsed.days
       };
@@ -965,13 +976,10 @@ $('#activityInput').onchange = e => {
 };
 
 // Settings
-$('#setBase').onchange = e => {
+$('#setTarget').onchange = e => {
   const v = Number(e.target.value);
-  if (Number.isFinite(v) && v >= 0) { state.settings.baseCalories = v; state.settingsU = Date.now(); save(); queuePush(); render(); }
-};
-$('#setMult').onchange = e => {
-  const v = Number(e.target.value);
-  if (Number.isFinite(v) && v >= 0) { state.settings.activityMultiplier = v; state.settingsU = Date.now(); save(); queuePush(); render(); }
+  if (Number.isFinite(v) && v > 0) { state.settings.dailyTarget = Math.round(v); state.settingsU = Date.now(); save(); queuePush(); }
+  render();
 };
 $('#setWeekStart').onchange = e => {
   state.settings.weekStart = Number(e.target.value);
@@ -1020,7 +1028,7 @@ $('#wipeBtn').onclick = () => {
   // Tombstone every known day so the wipe propagates instead of syncing back.
   const wiped = {};
   Object.keys(state.days).forEach(k => { wiped[k] = { entries: [], activity: null, u: Date.now() }; });
-  state = { version: 1, settings: Object.assign({}, DEFAULTS), settingsU: Date.now(), days: wiped };
+  state = { version: 1, settings: cleanSettings(), settingsU: Date.now(), days: wiped };
   save();
   queuePush();
   goToDay(todayKey());
