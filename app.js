@@ -4,7 +4,7 @@
 'use strict';
 
 const KEY = 'calorie-tracker/v1';
-const DEFAULTS = { dailyTarget: 2550, weekStart: 1 };
+const DEFAULTS = { dailyTarget: 2550, maintenance: 2600, weekStart: 1 };
 
 /* The target is one fixed number. Older saves (and older devices still
    syncing) carry baseCalories/activityMultiplier from when the target grew
@@ -12,9 +12,11 @@ const DEFAULTS = { dailyTarget: 2550, weekStart: 1 };
 function cleanSettings(s) {
   const src = s && typeof s === 'object' ? s : {};
   const t = Number(src.dailyTarget);
+  const m = Number(src.maintenance);
   const w = Number(src.weekStart);
   return {
     dailyTarget: Number.isFinite(t) && t > 0 ? t : DEFAULTS.dailyTarget,
+    maintenance: Number.isFinite(m) && m > 0 ? m : DEFAULTS.maintenance,
     weekStart: w === 0 || w === 1 ? w : DEFAULTS.weekStart
   };
 }
@@ -121,7 +123,9 @@ function mutateDay(k, fn) {
 /* ─────────────────────────  the calorie model  ─────────────────────────
    target  = fixed daily target (Settings) — activity never moves it
    balance = eaten − target   (positive = surplus, negative = deficit)
-   Activity calories are recorded and shown for reference only. */
+   net     = eaten − (maintenance + activity)
+   The target is what you aim to eat. Net is the day's true energy balance,
+   shown as secondary information — it never feeds back into the target. */
 function activeCalsOf(k) {
   const a = dayOf(k).activity;
   return a && Number.isFinite(a.calories) ? Math.max(0, a.calories) : 0;
@@ -131,7 +135,9 @@ const targetOf = () => state.settings.dailyTarget;
 
 function summaryOf(k) {
   const eaten = eatenOf(k), target = targetOf();
-  return { eaten, target, active: activeCalsOf(k), balance: eaten - target, logged: dayOf(k).entries.length > 0 };
+  const active = activeCalsOf(k);
+  const net = eaten - state.settings.maintenance - active;
+  return { eaten, target, active, balance: eaten - target, net, logged: dayOf(k).entries.length > 0 };
 }
 
 const round = n => Math.round(n);
@@ -182,13 +188,21 @@ function renderToday() {
   $('#sumLeftLabel').textContent = over ? 'Over' : 'Left';
   $('#sumLeft').textContent = kcal(Math.abs(s.balance));
 
+  // Secondary: the day's real energy balance. Deliberately small — it is
+  // context, not the number to eat to.
+  const netEl = $('#dayNet');
+  netEl.className = s.net > 0 ? 'pos' : 'neg';
+  netEl.textContent = `${kcal(Math.abs(s.net))} ${s.net > 0 ? 'surplus' : 'deficit'}`;
+  $('#dayActive').textContent = kcal(s.active);
+  $('#dayNetMath').textContent =
+    `${kcal(s.eaten)} eaten − (${kcal(state.settings.maintenance)} maintenance + ${kcal(s.active)} activity)`;
+
   // Activity
   const act = dayOf(cursor).activity;
   $('#activityInput').value = act ? act.calories : '';
   $('#activitySource').textContent = !act ? 'not set' : (act.source === 'samsung' ? 'Samsung Health' : 'manual');
-  $('#activityNote').textContent = act
-    ? `For reference only — your target stays ${kcal(s.target)}.`
-    : 'For reference only — it does not change your target.';
+  $('#activityNote').textContent =
+    `Counts toward the day's net only — your target stays ${kcal(s.target)}.`;
 
   renderEntries();
   renderQuickAdd();
@@ -860,6 +874,7 @@ function renderSyncPanel() {
 /* ─────────────────────────  settings & backup  ───────────────────────── */
 function renderSettings() {
   $('#setTarget').value = state.settings.dailyTarget;
+  $('#setMaint').value = state.settings.maintenance;
   $('#setWeekStart').value = String(state.settings.weekStart);
 }
 
@@ -979,6 +994,11 @@ $('#activityInput').onchange = e => {
 $('#setTarget').onchange = e => {
   const v = Number(e.target.value);
   if (Number.isFinite(v) && v > 0) { state.settings.dailyTarget = Math.round(v); state.settingsU = Date.now(); save(); queuePush(); }
+  render();
+};
+$('#setMaint').onchange = e => {
+  const v = Number(e.target.value);
+  if (Number.isFinite(v) && v > 0) { state.settings.maintenance = Math.round(v); state.settingsU = Date.now(); save(); queuePush(); }
   render();
 };
 $('#setWeekStart').onchange = e => {

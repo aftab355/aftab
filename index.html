@@ -53,12 +53,16 @@
         <div class="sum-op">=</div>
         <div><span class="sum-label" id="sumLeftLabel">Left</span><strong id="sumLeft">0</strong></div>
       </div>
+      <div class="daynet">
+        <div>Activity <b id="dayActive">0</b> kcal &nbsp;·&nbsp; Net today <b id="dayNet">0</b></div>
+        <div class="daynet-math" id="dayNetMath"></div>
+      </div>
     </div>
 
     <!-- Activity -->
     <div class="card">
       <div class="card-head">
-        <h2>Activity <span class="h2-note">(reference only)</span></h2>
+        <h2>Activity</h2>
         <span class="pill" id="activitySource">not set</span>
       </div>
       <div class="field-row">
@@ -138,13 +142,18 @@
         <input type="number" id="setTarget" min="1" step="10" inputmode="numeric">
       </label>
       <label class="field">
+        <span>Sedentary maintenance (used for the day's net)</span>
+        <input type="number" id="setMaint" min="1" step="10" inputmode="numeric">
+      </label>
+      <label class="field">
         <span>Week starts on</span>
         <select id="setWeekStart">
           <option value="1">Monday</option>
           <option value="0">Sunday</option>
         </select>
       </label>
-      <p class="formula">Same target every day. Activity you log is shown for reference and never changes it.</p>
+      <p class="formula">You aim to eat the target every day; activity never changes it.<br>
+        Net today = eaten &minus; (maintenance + activity)</p>
     </div>
 
     <div class="card">

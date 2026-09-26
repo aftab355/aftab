@@ -90,7 +90,11 @@ body{
 .sum-op{font-size:16px;color:var(--ink-3);padding-bottom:2px}
 .balance.is-under #sumLeft{color:var(--good)}
 .balance.is-over  #sumLeft{color:var(--over)}
-.h2-note{font-weight:500;color:var(--ink-3);font-size:.8em}
+.daynet{margin-top:12px;padding-top:10px;border-top:1px solid var(--line-soft);font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.daynet b{color:var(--ink);font-weight:620}
+.daynet b.pos{color:var(--over)}
+.daynet b.neg{color:var(--good)}
+.daynet-math{font-size:11px;color:var(--ink-3);margin-top:2px}
 
 /* ---------- fields ---------- */
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}

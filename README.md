@@ -10,11 +10,14 @@ Netlify Function for optional cross-device sync.
 
 ```
 target  = 2550 kcal every day (editable in Settings)
-balance = eaten − target          (positive = surplus, negative = deficit)
+left    = target − eaten
+net     = eaten − (maintenance + activity)   (maintenance defaults to 2600)
 ```
 
-The target is fixed. Activity calories are logged and shown for reference, but
-never change the target — the goal post does not move.
+The target is fixed: eat the same amount every day, whatever your activity.
+Activity never changes it. The day's full net deficit, including activity, is
+shown in smaller type under the calories remaining, as context rather than
+a number to eat back.
 The weekly figures only count days you actually logged — otherwise every
 not-yet-happened day in the current week would read as a full-target deficit
 and the weekly number would be meaningless by Tuesday.
