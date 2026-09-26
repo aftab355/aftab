@@ -9,13 +9,14 @@ Netlify Function for optional cross-device sync.
 ## The calorie model
 
 ```
-target  = base calories + multiplier × active calories
+target  = 2550 kcal every day (editable in Settings)
 balance = eaten − target          (positive = surplus, negative = deficit)
 ```
 
-Defaults are **2600** base and **×0.75** on activity, both editable in Settings.
+The target is fixed. Activity calories are logged and shown for reference, but
+never change the target — the goal post does not move.
 The weekly figures only count days you actually logged — otherwise every
-not-yet-happened day in the current week would read as a full 2600 kcal deficit
+not-yet-happened day in the current week would read as a full-target deficit
 and the weekly number would be meaningless by Tuesday.
 
 ## Samsung Health
@@ -38,8 +39,8 @@ Files that work: `com.samsung.shealth.calories_burned.details.*.csv` (best),
 The parser sniffs rather than assumes, because Samsung moves columns between
 app versions. It skips the metadata line those exports start with, matches the
 date and active-calorie columns by name, and deliberately refuses `rest_`,
-`bmr_` and `tef_` columns — that baseline burn is what the 2600 already covers,
-so counting it as activity would inflate your allowance by roughly 1700 kcal.
+`bmr_` and `tef_` columns — that is baseline burn, not activity, and would inflate the
+activity figure by roughly 1700 kcal.
 
 Daily-summary files take the **highest** value per day, since a phone and a
 watch each write their own row and summing them double-counts. Exercise files
