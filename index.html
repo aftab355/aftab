@@ -109,7 +109,7 @@
 
     <div class="stats">
       <div class="card stat"><span class="stat-label">Eaten</span><strong class="stat-val" id="wkEaten">0</strong><span class="stat-sub">kcal this week</span></div>
-      <div class="card stat"><span class="stat-label">Burned</span><strong class="stat-val" id="wkBurned">0</strong><span class="stat-sub" id="wkBurnedSub">maintenance + activity</span></div>
+      <div class="card stat"><span class="stat-label">Allowance</span><strong class="stat-val" id="wkBurned">0</strong><span class="stat-sub" id="wkBurnedSub">maintenance + 0.75 × activity</span></div>
       <div class="card stat" id="wkNetCard"><span class="stat-label">Net</span><strong class="stat-val" id="wkNet">0</strong><span class="stat-sub" id="wkNetSub">balance</span></div>
       <div class="card stat"><span class="stat-label">Avg / day</span><strong class="stat-val" id="wkAvg">0</strong><span class="stat-sub" id="wkAvgSub">eaten</span></div>
     </div>
@@ -117,7 +117,7 @@
     <p class="wk-note" id="wkPending" hidden></p>
 
     <div class="card">
-      <div class="card-head"><h2>Daily breakdown</h2><span class="pill legend"><i class="sw-eat"></i>eaten <i class="sw-tgt"></i>burned</span></div>
+      <div class="card-head"><h2>Daily breakdown</h2><span class="pill legend"><i class="sw-eat"></i>eaten <i class="sw-tgt"></i>allowance</span></div>
       <div class="chart" id="weekChart"></div>
     </div>
 
@@ -146,6 +146,10 @@
         <input type="number" id="setMaint" min="1" step="10" inputmode="numeric">
       </label>
       <label class="field">
+        <span>Share of activity counted toward net</span>
+        <input type="number" id="setFactor" min="0" max="2" step="0.05" inputmode="decimal">
+      </label>
+      <label class="field">
         <span>Week starts on</span>
         <select id="setWeekStart">
           <option value="1">Monday</option>
@@ -153,7 +157,7 @@
         </select>
       </label>
       <p class="formula">You aim to eat the target every day; activity never changes it.<br>
-        Net today = eaten &minus; (maintenance + activity)</p>
+        Net = eaten &minus; (maintenance + share &times; activity)</p>
     </div>
 
     <div class="card">

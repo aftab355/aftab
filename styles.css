@@ -176,7 +176,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,.drop:focus-visibl
 .sw-tgt{background:transparent;border-top:2px dashed var(--ink-3);height:0!important;width:12px!important;border-radius:0}
 
 .tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.wktable{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;min-width:340px}
+.wktable{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
 .wktable th{text-align:right;font-size:10px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink-3);padding:6px 4px;border-bottom:1px solid var(--line)}
 .wktable th:first-child,.wktable td:first-child{text-align:left}
 .wktable td{padding:8px 4px;border-bottom:1px solid var(--line-soft);text-align:right}

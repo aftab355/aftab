@@ -11,17 +11,18 @@ Netlify Function for optional cross-device sync.
 ```
 target  = 2550 kcal every day (editable in Settings)
 left    = target − eaten
-net     = eaten − (maintenance + activity)   (maintenance defaults to 2600)
+net     = eaten − (maintenance + 0.75 × activity)   (maintenance defaults to 2600)
 ```
 
 The target is fixed: eat the same amount every day, whatever your activity.
-Activity never changes it. The day's full net deficit, including activity, is
+Activity never changes it. The day's net deficit, including activity, is
 shown in smaller type under the calories remaining, as context rather than
 a number to eat back.
 
-The **Week** view tracks the real balance — eaten minus (maintenance +
-activity) — because that is what moves your weight. The dashed line on the
-chart is each day's burn, so a bar under its line is a deficit day. How close
+The **Week** view tracks the same net. Only three quarters of activity
+counts, to allow for wearables overestimating burn; the share is editable in
+Settings. The dashed line on the chart is each day's allowance, so a bar
+under its line is a deficit day. How close
 you stayed to the daily target is shown under the average.
 The weekly figures only count days you actually logged — otherwise every
 not-yet-happened day in the current week would read as a full-target deficit
