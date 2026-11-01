@@ -61,9 +61,13 @@ body{
 /* ---------- day nav ---------- */
 .daynav{display:flex;align-items:center;gap:8px;padding:8px 10px}
 .daynav-label{flex:1;text-align:center;display:flex;flex-direction:column;gap:1px;min-width:0}
-.daynav-label input[type=date]{
-  border:0;background:transparent;color:var(--ink);font:inherit;font-weight:620;font-size:15px;
-  text-align:center;width:100%;padding:0;
+.datebtn{position:relative;display:block;cursor:pointer;font-size:15px;font-weight:620}
+.datebtn strong{font-weight:620}
+.datebtn strong::after{content:"";display:inline-block;width:6px;height:6px;margin:0 0 3px 7px;
+  border:solid var(--ink-3);border-width:0 1.5px 1.5px 0;transform:rotate(45deg)}
+.datebtn input[type=date]{
+  position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;
+  border:0;padding:0;margin:0;font-size:16px;
 }
 .daynav-rel{font-size:12px;color:var(--ink-3)}
 .iconbtn{
@@ -80,7 +84,7 @@ body{
 .balance-word{font-size:14px;font-weight:600;color:var(--ink-2)}
 .balance.is-under .balance-num{color:var(--good)}
 .balance.is-over  .balance-num{color:var(--over)}
-.bar{position:relative;height:9px;border-radius:99px;background:var(--line-soft);margin:14px 0 10px;overflow:hidden}
+.bar{position:relative;height:9px;border-radius:99px;background:var(--line);margin:14px 0 10px;overflow:hidden}
 .bar-fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--good);border-radius:99px;transition:width .3s ease,background .2s}
 .balance.is-over .bar-fill{background:var(--over)}
 .sumrow{display:flex;align-items:flex-end;justify-content:center;gap:10px;font-variant-numeric:tabular-nums}
@@ -273,5 +277,20 @@ input[type=password]{
 .trend-line.over{stroke:var(--over)}
 .trend-foot{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:4px;font-variant-numeric:tabular-nums}
 .trend-foot .pos,.trend-foot .neg{font-size:12px}
-@media (max-width:420px){.tab{padding:6px 9px}.brand{font-size:15px}}
+
 .cal-net.live{color:var(--ink-3)}
+
+/* ---------- narrow screens ----------
+   Title plus four tabs doesn't fit one row on a phone, and wrapping left the
+   tabs floating right under a lone title. Drop the title (the app name is
+   already in the browser/home-screen label) and let the tabs fill the row. */
+@media (max-width:560px){
+  .brand{display:none}
+  .topbar-inner{padding-top:8px;padding-bottom:8px}
+  .tabs{margin-left:0;flex:1}
+  .tab{flex:1;padding:7px 4px;font-size:14px}
+  .addform{grid-template-columns:1fr 92px}
+}
+.qty{position:relative;display:block}
+.qty span{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--ink-3);font-size:15px;pointer-events:none}
+.qty input{padding-left:26px}

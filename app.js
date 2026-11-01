@@ -66,7 +66,9 @@ function relativeLabel(k) {
   if (k === t) return 'Today';
   if (k === addDays(t, -1)) return 'Yesterday';
   if (k === addDays(t, 1)) return 'Tomorrow';
-  return fmtLong(k);
+  // The full date is already the heading above this; repeating it says nothing.
+  const n = Math.round((parseKey(t) - parseKey(k)) / 864e5);
+  return n > 0 ? `${n} days ago` : `in ${-n} days`;
 }
 
 /* ─────────────────────────  state  ───────────────────────── */
@@ -176,6 +178,9 @@ function renderToday() {
   const s = summaryOf(cursor);
 
   $('#datePicker').value = cursor;
+  $('#datePicker').max = todayKey();
+  $('#dateText').textContent = parseKey(cursor).toLocaleDateString(undefined,
+    { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
   $('#dayRelative').textContent = relativeLabel(cursor);
   $('#nextDay').disabled = cursor >= todayKey();
 
@@ -1181,6 +1186,11 @@ $('#nextDay').onclick = () => {
   if (cursor >= todayKey()) return;
   goToDay(addDays(cursor, 1));
 };
+/* The native date input sits invisibly over the formatted label: Android
+   renders it as a left-aligned dd/mm/yyyy box with its own chevron that
+   ignores text-align. showPicker() opens it where tapping the overlay alone
+   would not (desktop Chrome). */
+$('#datePicker').onclick = e => { try { e.target.showPicker(); } catch { /* unsupported — native tap handles it */ } };
 $('#datePicker').onchange = e => {
   if (!e.target.value) return;
   goToDay(e.target.value > todayKey() ? todayKey() : e.target.value);
