@@ -294,3 +294,23 @@ input[type=password]{
 .qty{position:relative;display:block}
 .qty span{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--ink-3);font-size:15px;pointer-events:none}
 .qty input{padding-left:26px}
+
+/* ---------- imported history ---------- */
+textarea{
+  width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:10px;
+  background:var(--bg);color:var(--ink);font:inherit;font-size:16px;line-height:1.45;resize:vertical;
+}
+textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hist-probs{margin-top:10px;font-size:12px;color:var(--warn);display:flex;flex-direction:column;gap:6px}
+.hist-prob{font-size:12px;color:var(--warn)}
+.hist-line{color:var(--ink-3);font-family:ui-monospace,monospace;font-size:11px;word-break:break-word}
+.hist-table{max-height:320px;overflow:auto}
+.hist-table .muted td{color:var(--ink-3)}
+.hist-flag{font-size:11px;color:var(--ink-3);text-align:right}
+.preview td.neg,.preview td.pos{text-align:right}
+.balance.is-imported .bar,.balance.is-imported .sumrow,.balance.is-imported .daynet:not(.recnote){display:none}
+.recnote{line-height:1.5}
+.recnote .btn{margin-top:8px;font-size:13px;padding:7px 12px}
+.recnote[hidden]{display:none}
+.ring-arc.imported{opacity:.45}
+.col-val.pos,.col-val.neg{font-size:10px}
