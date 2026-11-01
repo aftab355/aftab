@@ -57,6 +57,11 @@
         <div class="sum-op">=</div>
         <div><span class="sum-label" id="sumLeftLabel">Left</span><strong id="sumLeft">0</strong></div>
       </div>
+      <div class="daynet recnote" id="recordedNote" hidden>
+        Imported from your notes &mdash; only the net was recorded for this day.
+        Logging food here replaces it.
+        <div><button class="btn" id="clearRecorded" type="button">Remove imported net</button></div>
+      </div>
       <div class="daynet">
         <div>Activity <b id="dayActive">0</b> kcal &nbsp;·&nbsp; Net today <b id="dayNet">0</b></div>
         <div class="daynet-math" id="dayNetMath"></div>
@@ -205,6 +210,24 @@
       </label>
       <p class="formula">You aim to eat the target every day; activity never changes it.<br>
         Net = eaten &minus; (maintenance + share &times; activity)</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Past days from notes</h2></div>
+      <p class="explain">
+        Paste history you kept elsewhere, one day per line, as you wrote it &mdash;
+        <b>June 3rd: 1390 calories burned (Deficit)</b>, <b>June 6th: -1685 (Surplus)</b>,
+        <b>July 25: Maintenance</b>, or a range like <b>August 9th - August 14th: assume 500 deficit</b>.
+        Positive numbers are deficits, negative are surpluses. Only the net is stored, so these days
+        show in Week and Month but have no food breakdown. Days you already logged food on are left alone.
+      </p>
+      <label class="field">
+        <span>Year for dates without one</span>
+        <input type="number" id="historyYear" min="2000" max="2100" step="1" inputmode="numeric">
+      </label>
+      <textarea id="historyText" rows="8" placeholder="June 3rd: 1390 calories burned (Deficit)&#10;June 4th: 1265 calories burned (Deficit)" aria-label="Past days, one per line"></textarea>
+      <div class="btnrow" style="margin-top:10px"><button class="btn primary" id="historyPreview" type="button">Preview</button></div>
+      <div id="historyResult"></div>
     </div>
 
     <div class="card">

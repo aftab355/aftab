@@ -96,7 +96,7 @@ function pruneTombstones() {
   const cutoff = addDays(todayKey(), -90);
   for (const k of Object.keys(state.days)) {
     const d = state.days[k];
-    if (k < cutoff && !d.entries.length && !d.activity) delete state.days[k];
+    if (k < cutoff && !d.entries.length && !d.activity && !d.recorded) delete state.days[k];
   }
 }
 
@@ -140,19 +140,48 @@ function activeCalsOf(k) {
 const eatenOf = k => dayOf(k).entries.reduce((sum, e) => sum + e.calories * (e.qty || 1), 0);
 const targetOf = () => state.settings.dailyTarget;
 
+/* Days imported from old notes carry only a net (`recorded`), no food or
+   activity. Food logged on such a day takes over and the recorded net is
+   ignored, so the two can never be added together. */
+function recordedOf(k) {
+  const r = dayOf(k).recorded;
+  return r && Number.isFinite(r.net) ? r : null;
+}
+
 function summaryOf(k) {
   const eaten = eatenOf(k), target = targetOf();
   const active = activeCalsOf(k);
   const allowance = state.settings.maintenance + state.settings.activityFactor * active;
+  const hasFood = dayOf(k).entries.length > 0;
+  const rec = hasFood ? null : recordedOf(k);
   return {
     eaten, target, active, allowance,
-    balance: eaten - target, net: eaten - allowance,
-    logged: dayOf(k).entries.length > 0
+    balance: eaten - target,
+    net: rec ? rec.net : eaten - allowance,
+    logged: hasFood || !!rec,
+    netOnly: !!rec,
+    estimate: !!(rec && rec.estimate)
+  };
+}
+
+/* Totals over a set of day summaries. Net counts every day; eaten, activity
+   and allowance only exist for days with food logged, so they are summed
+   over those alone and `full` says how many that was. */
+function totalsOf(rows) {
+  const full = rows.filter(r => !r.netOnly);
+  return {
+    days: rows.length,
+    full: full.length,
+    imported: rows.length - full.length,
+    net: rows.reduce((a, r) => a + r.net, 0),
+    eaten: full.reduce((a, r) => a + r.eaten, 0),
+    allowance: full.reduce((a, r) => a + r.allowance, 0),
+    active: full.reduce((a, r) => a + r.active, 0)
   };
 }
 
 const round = n => Math.round(n);
-const withSign = n => (n > 0 ? '+' : '') + round(n).toLocaleString();
+const withSign = n => { const r = round(n) || 0; return (r > 0 ? '+' : '') + r.toLocaleString(); };  // || 0: no "-0"
 const kcal = n => round(n).toLocaleString();
 
 /* ─────────────────────────  dom helpers  ───────────────────────── */
@@ -184,8 +213,22 @@ function renderToday() {
   $('#dayRelative').textContent = relativeLabel(cursor);
   $('#nextDay').disabled = cursor >= todayKey();
 
-  // Headline: how many calories left, or how far over.
+  // An imported day has nothing to eat against — show its recorded net instead.
   const card = $('#balanceCard');
+  card.classList.toggle('is-imported', s.netOnly);
+  $('#recordedNote').hidden = !s.netOnly;
+  if (s.netOnly) {
+    const over = s.net > 0;
+    card.classList.toggle('is-over', over);
+    card.classList.toggle('is-under', !over);
+    $('#balanceNum').textContent = kcal(Math.abs(s.net));
+    $('#balanceWord').textContent = `kcal ${over ? 'surplus' : 'deficit'}${s.estimate ? ' (estimate)' : ''}`;
+    $('#barFill').style.width = '0%';
+    renderActivityAndLists(s);
+    return;
+  }
+
+  // Headline: how many calories left, or how far over.
   const over = s.balance > 0;
   card.classList.toggle('is-over', over);
   card.classList.toggle('is-under', !over);
@@ -212,6 +255,10 @@ function renderToday() {
     `${kcal(s.eaten)} eaten − (${kcal(state.settings.maintenance)} maintenance + ` +
     `${state.settings.activityFactor} × ${kcal(s.active)} activity)`;
 
+  renderActivityAndLists(s);
+}
+
+function renderActivityAndLists(s) {
   // Activity
   const act = dayOf(cursor).activity;
   $('#activityInput').value = act ? act.calories : '';
@@ -401,10 +448,9 @@ function renderWeek() {
   /* The week tracks the balance against maintenance + discounted activity
      (see the calorie model). The fixed target is a daily eating habit, not
      the measure of the week; adherence to it is shown under the average. */
-  const eaten = counted.reduce((s, r) => s + r.eaten, 0);
-  const allowance = counted.reduce((s, r) => s + r.allowance, 0);
-  const active = counted.reduce((s, r) => s + r.active, 0);
-  const net = eaten - allowance;
+  const T = totalsOf(counted);
+  const { eaten, allowance, active, net } = T;
+  const imp = T.imported ? ` · ${T.full} of ${T.days} days` : '';
 
   const thisWeek = startOfWeek(t, state.settings.weekStart);
   $('#weekLabel').textContent = `${fmtShort(days[0])} – ${fmtShort(days[6])}`;
@@ -414,11 +460,12 @@ function renderWeek() {
     : parseKey(weekCursor).getFullYear();
   $('#nextWeek').disabled = weekCursor >= thisWeek;
 
-  $('#wkEaten').textContent = counted.length ? kcal(eaten) : '—';
+  $('#wkEaten').textContent = T.full ? kcal(eaten) : '—';
+  $('#wkEaten').nextElementSibling.textContent = 'kcal this week' + imp;
   const factor = state.settings.activityFactor;
-  $('#wkBurned').textContent = counted.length ? kcal(allowance) : '—';
-  $('#wkBurnedSub').textContent = counted.length
-    ? `${kcal(state.settings.maintenance)} × ${counted.length} + ${factor} × ${kcal(active)} activity`
+  $('#wkBurned').textContent = T.full ? kcal(allowance) : '—';
+  $('#wkBurnedSub').textContent = T.full
+    ? `${kcal(state.settings.maintenance)} × ${T.full} + ${factor} × ${kcal(active)} activity`
     : `maintenance + ${factor} × activity`;
 
   /* Today may have been the only logged day, so an empty week is now reachable
@@ -430,13 +477,14 @@ function renderWeek() {
   $('#wkNet').textContent = counted.length ? withSign(net) : '—';
   $('#wkNetSub').textContent = counted.length
     ? (net > 0 ? 'surplus' : 'deficit') + (pending ? ' — excl. today' : ' this week')
+      + (T.imported ? ` · ${T.imported} imported` : '')
     : (pending ? 'today still going' : 'nothing logged');
 
-  $('#wkAvg').textContent = counted.length ? kcal(eaten / counted.length) : '—';
-  const vsTarget = counted.length ? eaten / counted.length - state.settings.dailyTarget : 0;
-  $('#wkAvgSub').textContent = counted.length
+  $('#wkAvg').textContent = T.full ? kcal(eaten / T.full) : '—';
+  const vsTarget = T.full ? eaten / T.full - state.settings.dailyTarget : 0;
+  $('#wkAvgSub').textContent = T.full
     ? `eaten · ${withSign(vsTarget)} vs ${kcal(state.settings.dailyTarget)} target`
-    : (pending ? 'today still going' : 'no logged days');
+    : T.imported ? 'no food logged' : (pending ? 'today still going' : 'no logged days');
 
   /* Today is excluded, not discarded — say what it holds and when it lands,
      so the cards above don't look like they've lost the day's entries. */
@@ -465,7 +513,8 @@ function renderChart(rows) {
   rows.forEach(r => {
     const col = el('div', 'col');
     col.classList.toggle('over', r.net > 0 && r.logged);
-    col.title = r.logged
+    col.title = r.netOnly ? `${fmtLong(r.key)} — imported net ${withSign(r.net)}`
+      : r.logged
       ? `${fmtLong(r.key)} — ${kcal(r.eaten)} eaten / ${kcal(r.allowance)} allowance (${withSign(r.net)})`
       : `${fmtLong(r.key)} — nothing logged`;
 
@@ -475,13 +524,16 @@ function renderChart(rows) {
     else bar.classList.add('empty');
     bars.append(bar);
 
-    if (r.logged) {
+    if (r.logged && !r.netOnly) {
       const line = el('div', 'col-target');
       line.style.bottom = ((r.allowance / peak) * 100) + '%';
       bars.append(line);
     }
 
-    const val = el('div', 'col-val', r.eaten ? kcal(r.eaten) : '');
+    // Imported days have no bar to draw; print their net where the value goes.
+    const val = r.netOnly
+      ? el('div', 'col-val ' + (r.net > 0 ? 'pos' : 'neg'), withSign(r.net))
+      : el('div', 'col-val', r.eaten ? kcal(r.eaten) : '');
     const lbl = el('div', 'col-label', DOW[parseKey(r.key).getDay()]);
     if (r.key === t) lbl.style.color = 'var(--accent)';
 
@@ -506,14 +558,15 @@ function renderWeekTable(rows) {
 
     tr.append(
       day,
-      el('td', null, r.logged ? kcal(r.eaten) : '—'),
+      el('td', null, r.logged && !r.netOnly ? kcal(r.eaten) : '—'),
       el('td', null, r.active ? kcal(r.active) : '—')
     );
 
     const bal = el('td');
     if (r.logged) {
       bal.className = r.net > 0 ? 'pos' : 'neg';
-      bal.textContent = withSign(r.net);
+      bal.textContent = withSign(r.net) + (r.netOnly ? '*' : '');
+      if (r.netOnly) bal.title = 'Imported net — no food breakdown';
     } else {
       bal.textContent = '—';
     }
@@ -556,11 +609,14 @@ function ringSvg(r, isToday) {
   track.setAttribute('cx', 18); track.setAttribute('cy', 18); track.setAttribute('r', 15);
   track.setAttribute('class', 'ring-track');
   svg.append(track);
-  if (r.logged && r.allowance > 0) {
-    const share = Math.min(1, r.eaten / r.allowance);
+  if (r.logged && (r.netOnly || r.allowance > 0)) {
+    // Imported days have no eaten/allowance split, so their ring is drawn
+    // full and faded: it says which side of the line, not by how much.
+    const share = r.netOnly ? 1 : Math.min(1, r.eaten / r.allowance);
     const arc = document.createElementNS(NS, 'circle');
     arc.setAttribute('cx', 18); arc.setAttribute('cy', 18); arc.setAttribute('r', 15);
-    arc.setAttribute('class', 'ring-arc ' + (r.net > 0 ? 'over' : isToday && !todaySettled() ? 'live' : 'under'));
+    arc.setAttribute('class', 'ring-arc ' + (r.net > 0 ? 'over' : isToday && !todaySettled() ? 'live' : 'under')
+      + (r.netOnly ? ' imported' : ''));
     arc.setAttribute('stroke-dasharray', `${share * C} ${C}`);
     arc.setAttribute('transform', 'rotate(-90 18 18)');
     svg.append(arc);
@@ -577,10 +633,8 @@ function renderMonth() {
   const pending = !todaySettled() && logged.some(r => r.key === t);
   const counted = pending ? logged.filter(r => r.key !== t) : logged;
 
-  const eaten = counted.reduce((s, r) => s + r.eaten, 0);
-  const allowance = counted.reduce((s, r) => s + r.allowance, 0);
-  const active = counted.reduce((s, r) => s + r.active, 0);
-  const net = eaten - allowance;
+  const T = totalsOf(counted);
+  const { eaten, allowance, active, net } = T;
   const deficitDays = counted.filter(r => r.net <= 0).length;
 
   const thisMonth = monthOf(t);
@@ -609,15 +663,16 @@ function renderMonth() {
   $('#moAvg').textContent = has ? withSign(net / counted.length) : '—';
   $('#moAvgSub').textContent = has ? 'net per logged day' : 'net per day';
 
-  $('#moEaten').textContent = has ? kcal(eaten / counted.length) : '—';
-  $('#moEatenSub').textContent = has
-    ? `eaten / day · ${withSign(eaten / counted.length - state.settings.dailyTarget)} vs target`
-    : 'eaten / day';
+  $('#moEaten').textContent = T.full ? kcal(eaten / T.full) : '—';
+  $('#moEatenSub').textContent = T.full
+    ? `eaten / day · ${withSign(eaten / T.full - state.settings.dailyTarget)} vs target`
+    : T.imported ? 'no food logged' : 'eaten / day';
 
-  $('#moTotals').textContent = has
-    ? `${kcal(eaten)} eaten · ${kcal(active)} activity · ${kcal(allowance)} allowance over ${counted.length} day${counted.length === 1 ? '' : 's'}`
-      + (pending ? ' — today joins at ' + fmtHour(SETTLE_HOUR) : '')
-    : '';
+  const plural = n => `${n} day${n === 1 ? '' : 's'}`;
+  $('#moTotals').textContent = !has ? ''
+    : (T.full ? `${kcal(eaten)} eaten · ${kcal(active)} activity · ${kcal(allowance)} allowance over ${plural(T.full)}` : '')
+      + (T.imported ? `${T.full ? '; ' : ''}${plural(T.imported)} imported as net only` : '')
+      + (pending ? ' — today joins at ' + fmtHour(SETTLE_HOUR) : '');
 
   renderCalendar(rows);
   renderMonthTrend(rows, counted);
@@ -722,16 +777,172 @@ function renderMonthDetail() {
   const k = monthSel;
   const s = summaryOf(k);
   $('#moSelLabel').textContent = fmtLong(k);
-  $('#moSelEaten').textContent = s.logged ? kcal(s.eaten) : '—';
+  $('#moSelEaten').textContent = s.logged && !s.netOnly ? kcal(s.eaten) : '—';
   $('#moSelActive').textContent = s.active ? kcal(s.active) : '—';
-  $('#moSelAllow').textContent = s.logged ? kcal(s.allowance) : '—';
+  $('#moSelAllow').textContent = s.logged && !s.netOnly ? kcal(s.allowance) : '—';
   const n = $('#moSelNet');
   const live = k === todayKey() && !todaySettled();
   n.className = !s.logged || live ? '' : s.net > 0 ? 'pos' : 'neg';
   n.textContent = s.logged ? withSign(s.net) : '—';
   $('#moSelVerdict').textContent = !s.logged ? 'Nothing logged'
     : live ? 'Day still going'
-    : s.net > 0 ? 'Surplus' : 'Deficit';
+    : (s.net > 0 ? 'Surplus' : 'Deficit') + (s.estimate ? ' · estimate' : s.netOnly ? ' · imported' : '');
+}
+
+/* ═════════════════════  past days from notes  ═════════════════════
+   For history kept outside the app, where only each day's deficit was
+   written down. Accepts the notes as typed — "June 3rd: 1390 calories
+   burned (Deficit)", "(*June 14th) -1600 …(surplus)", "July 25: Maintenance",
+   "August 9th - August 14th: assume 500 cal deficit" — or plain
+   "2026-06-03 1390". The number is read as the notes write it: positive is
+   a deficit, negative a surplus; the app stores the opposite sign (net). */
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+let pendingHistory = null;
+
+function parseHistory(text, year) {
+  const rows = [], problems = [];
+  const seen = new Map();
+  let prev = null;
+  const t = todayKey();
+
+  text.split(/\r?\n/).forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line) return;
+    const n = i + 1;
+
+    // Dates: ISO, or month name + day (ordinal suffixes and typos like "23d").
+    const dates = [];
+    let end = 0;
+    const iso = /\b(\d{4})-(\d{1,2})-(\d{1,2})\b/g;
+    const named = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(\d{1,2})(?:st|nd|rd|th|d)?\b/gi;
+    let m;
+    while ((m = iso.exec(line)) && dates.length < 2) {
+      dates.push(new Date(+m[1], +m[2] - 1, +m[3])); end = iso.lastIndex;
+    }
+    if (!dates.length) {
+      while ((m = named.exec(line)) && dates.length < 2) {
+        dates.push(new Date(year, MONTHS.indexOf(m[1].toLowerCase().slice(0, 3)), +m[2])); end = named.lastIndex;
+      }
+    }
+    if (!dates.length) { problems.push({ n, line, why: 'no date found — skipped' }); return; }
+
+    const rest = line.slice(end);
+    const num = rest.match(/(^|[^\d])(-?)\s*(\d[\d,]*(?:\.\d+)?)/);
+    let value;
+    if (num) value = Number((num[2] + num[3]).replace(/,/g, ''));
+    else if (/maint/i.test(rest)) value = 0;
+    else { problems.push({ n, line, why: 'no number found — skipped' }); return; }
+
+    const estimate = /assum|estimat|guess/i.test(rest);
+    if (/surplus/i.test(rest) && value > 0) problems.push({ n, line, why: 'says surplus but the number is positive — imported as a deficit' });
+    if (/defic/i.test(rest) && value < 0 && !estimate) problems.push({ n, line, why: 'says deficit but the number is negative — imported as a surplus' });
+
+    // A range ("Aug 9 – Aug 14") gives every day in it the same value.
+    const [a, b] = dates.length === 2 && dates[1] > dates[0] ? dates : [dates[0], dates[0]];
+    const keys = [];
+    for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) keys.push(keyOf(d));
+    if (keys.length > 62) { problems.push({ n, line, why: 'date range longer than two months — skipped' }); return; }
+
+    keys.forEach(k => {
+      if (k > t) { problems.push({ n, line, why: `${fmtShort(k)} is in the future — skipped` }); return; }
+      if (seen.has(k)) {
+        problems.push({ n, line, why: `${fmtShort(k)} already appears on line ${seen.get(k)} — this one skipped. Typo in the month?` });
+        return;
+      }
+      if (prev && k < prev) problems.push({ n, line, why: `${fmtShort(k)} comes after ${fmtShort(prev)} — check the date` });
+      seen.set(k, n);
+      prev = k;
+      rows.push({ key: k, deficit: value, estimate, n });
+    });
+  });
+  return { rows, problems };
+}
+
+function previewHistory() {
+  const box = $('#historyResult');
+  box.textContent = '';
+  pendingHistory = null;
+  const year = Number($('#historyYear').value) || new Date().getFullYear();
+  const { rows, problems } = parseHistory($('#historyText').value, year);
+  if (!rows.length) {
+    box.append(note('bad', problems.length ? 'No usable lines.' : 'Paste some lines first.'));
+    problems.forEach(p => box.append(el('div', 'hist-prob', `Line ${p.n}: ${p.why}`)));
+    return;
+  }
+
+  const food = rows.filter(r => dayOf(r.key).entries.length);
+  const replace = rows.filter(r => !dayOf(r.key).entries.length && recordedOf(r.key));
+  const usable = rows.filter(r => !dayOf(r.key).entries.length);
+  const total = usable.reduce((s, r) => s + r.deficit, 0);
+
+  box.append(note('ok',
+    `${usable.length} day${usable.length === 1 ? '' : 's'}, ${fmtShort(rows[0].key)} – ${fmtShort(rows[rows.length - 1].key)} ` +
+    `(sorted by date below). Total ${total >= 0 ? 'deficit' : 'surplus'} ${kcal(Math.abs(total))} kcal ` +
+    `≈ ${(Math.abs(total) / KCAL_PER_KG).toFixed(1)} kg.` +
+    (replace.length ? ` ${replace.length} already imported will be replaced.` : '') +
+    (food.length ? ` ${food.length === 1 ? '1 day has' : food.length + ' days have'} food logged here and ${food.length === 1 ? 'is' : 'are'} left alone.` : '')));
+
+  if (problems.length) {
+    const wrap = el('div', 'hist-probs');
+    wrap.append(el('strong', null, 'Check these lines'));
+    problems.forEach(p => {
+      const d = el('div', 'hist-prob');
+      d.append(el('b', null, `Line ${p.n}: `), document.createTextNode(p.why));
+      d.append(el('div', 'hist-line', p.line));
+      wrap.append(d);
+    });
+    box.append(wrap);
+  }
+
+  const tbl = el('table');
+  const sorted = rows.slice().sort((a, b) => a.key < b.key ? -1 : 1);
+  sorted.forEach(r => {
+    const tr = el('tr');
+    const has = dayOf(r.key).entries.length > 0;
+    if (has) tr.className = 'muted';
+    const v = el('td', has ? null : r.deficit > 0 ? 'neg' : r.deficit < 0 ? 'pos' : null,
+      r.deficit === 0 ? 'maintenance' : `${kcal(Math.abs(r.deficit))} ${r.deficit > 0 ? 'deficit' : 'surplus'}`);
+    tr.append(el('td', null, fmtLong(r.key)), el('td', 'hist-flag', has ? 'food logged — kept' : r.estimate ? 'estimate' : ''), v);
+    tbl.append(tr);
+  });
+  const pv = el('div', 'preview hist-table');
+  pv.append(tbl);
+  box.append(pv);
+
+  if (usable.length) {
+    pendingHistory = usable;
+    const row = el('div', 'btnrow');
+    row.style.marginTop = '12px';
+    const ok = el('button', 'btn primary', `Save ${usable.length} days`);
+    ok.type = 'button';
+    ok.onclick = saveHistory;
+    row.append(ok);
+    box.append(row);
+  }
+}
+
+function saveHistory() {
+  if (!pendingHistory) return;
+  const now = Date.now();
+  pendingHistory.forEach(r => {
+    const day = state.days[r.key] || (state.days[r.key] = { entries: [], activity: null });
+    if (day.entries.length) return;
+    day.recorded = { net: -r.deficit, source: 'notes' };
+    if (r.estimate) day.recorded.estimate = true;
+    day.u = now;
+  });
+  const n = pendingHistory.length;
+  const first = pendingHistory.reduce((a, r) => r.key < a ? r.key : a, pendingHistory[0].key);
+  pendingHistory = null;
+  save();
+  queuePush();
+  $('#historyResult').textContent = '';
+  $('#historyResult').append(note('ok', `Saved ${n} days. They show in Week and Month, marked as imported.`));
+  $('#historyText').value = '';
+  monthCursor = monthOf(first);
+  monthSel = null;
+  render();
+  toast(`${n} past days imported`);
 }
 
 /* ═════════════════════  Samsung Health CSV import  ═════════════════════
@@ -1261,6 +1472,16 @@ $('#setWeekStart').onchange = e => {
   state.settings.weekStart = Number(e.target.value);
   state.settingsU = Date.now();
   save(); queuePush(); syncWeekToCursor(); render();
+};
+
+// Past days from notes
+$('#historyYear').value = new Date().getFullYear();
+$('#historyPreview').onclick = previewHistory;
+$('#clearRecorded').onclick = () => {
+  if (!confirm('Remove the imported net for this day?')) return;
+  mutateDay(cursor, d => { delete d.recorded; });
+  render();
+  toast('Imported net removed');
 };
 
 // Import

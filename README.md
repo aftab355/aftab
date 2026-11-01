@@ -38,6 +38,21 @@ running-balance line shows how the month's net built up. It follows the
 Week rules: unlogged days count for nothing rather than as deficits, and
 today stays out of the totals (and uncoloured) until it settles.
 
+### Past days from notes
+
+**Settings → Past days from notes** takes history kept elsewhere, pasted as
+written: `June 3rd: 1390 calories burned (Deficit)`, `July 25: Maintenance`,
+`August 9th - August 14th: assume 500 deficit` (a range; "assume" marks the
+days as estimates). Positive numbers are deficits, negative surpluses. The
+preview flags lines it skipped, dates that repeat (usually a month typo) and
+dates out of order before anything is saved.
+
+Only the net exists for these days, so they are stored as a recorded net,
+not as food. They count toward net, deficit days and the running balance in
+Week and Month; eaten, activity and allowance totals cover only days with
+food logged, and the cards say how many that was. Logging food on an
+imported day replaces its recorded net, and Today has a button to remove it.
+
 ## Samsung Health
 
 **Samsung Health has no public web API.** The current Samsung Health Data SDK is
