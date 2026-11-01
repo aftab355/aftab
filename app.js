@@ -517,6 +517,218 @@ function renderWeekTable(rows) {
   });
 }
 
+/* ─────────────────────────  month view  ─────────────────────────
+   A calendar of the month, one ring per day: the ring fills with eaten as a
+   share of that day's allowance and turns red past it, so a month of
+   deficits reads as a month of green rings at a glance. Totals follow the
+   same rules as the week: only logged days count, and today is held out
+   until it has settled. */
+const KCAL_PER_KG = 7700;   // rule-of-thumb energy in 1 kg of body fat
+let monthCursor = monthOf(cursor);     // YYYY-MM-01 of the month on screen
+let monthSel = null;                    // day picked in the calendar
+
+function monthOf(k) { return k.slice(0, 8) + '01'; }
+function addMonths(mk, n) {
+  const d = parseKey(mk);
+  d.setDate(1);
+  d.setMonth(d.getMonth() + n);
+  return keyOf(d);
+}
+function monthDays(mk) {
+  const d = parseKey(mk);
+  const len = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return Array.from({ length: len }, (_, i) => addDays(mk, i));
+}
+
+function ringSvg(r, isToday) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 36 36');
+  svg.setAttribute('class', 'ring');
+  svg.setAttribute('aria-hidden', 'true');
+  const C = 2 * Math.PI * 15;
+  const track = document.createElementNS(NS, 'circle');
+  track.setAttribute('cx', 18); track.setAttribute('cy', 18); track.setAttribute('r', 15);
+  track.setAttribute('class', 'ring-track');
+  svg.append(track);
+  if (r.logged && r.allowance > 0) {
+    const share = Math.min(1, r.eaten / r.allowance);
+    const arc = document.createElementNS(NS, 'circle');
+    arc.setAttribute('cx', 18); arc.setAttribute('cy', 18); arc.setAttribute('r', 15);
+    arc.setAttribute('class', 'ring-arc ' + (r.net > 0 ? 'over' : isToday && !todaySettled() ? 'live' : 'under'));
+    arc.setAttribute('stroke-dasharray', `${share * C} ${C}`);
+    arc.setAttribute('transform', 'rotate(-90 18 18)');
+    svg.append(arc);
+  }
+  return svg;
+}
+
+function renderMonth() {
+  const t = todayKey();
+  const days = monthDays(monthCursor);
+  const rows = days.map(k => Object.assign({ key: k }, summaryOf(k)));
+  const past = rows.filter(r => r.key <= t);
+  const logged = past.filter(r => r.logged);
+  const pending = !todaySettled() && logged.some(r => r.key === t);
+  const counted = pending ? logged.filter(r => r.key !== t) : logged;
+
+  const eaten = counted.reduce((s, r) => s + r.eaten, 0);
+  const allowance = counted.reduce((s, r) => s + r.allowance, 0);
+  const active = counted.reduce((s, r) => s + r.active, 0);
+  const net = eaten - allowance;
+  const deficitDays = counted.filter(r => r.net <= 0).length;
+
+  const thisMonth = monthOf(t);
+  $('#monthLabel').textContent = parseKey(monthCursor).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  $('#monthRelative').textContent =
+    monthCursor === thisMonth ? 'This month'
+    : monthCursor === addMonths(thisMonth, -1) ? 'Last month' : '';
+  $('#nextMonth').disabled = monthCursor >= thisMonth;
+
+  const has = counted.length > 0;
+  const netCard = $('#moNetCard');
+  netCard.classList.toggle('is-over', has && net > 0);
+  netCard.classList.toggle('is-under', has && net <= 0);
+  $('#moNet').textContent = has ? withSign(net) : '—';
+  // Rough fat equivalent; one decimal, since withSign rounds to whole numbers.
+  const kg = net / KCAL_PER_KG;
+  $('#moNetSub').textContent = has
+    ? `${net > 0 ? 'surplus' : 'deficit'} · ≈ ${kg > 0 ? '+' : ''}${kg.toFixed(1)} kg`
+    : (pending ? 'today still going' : 'nothing logged');
+
+  $('#moDays').textContent = has ? `${deficitDays}/${counted.length}` : '—';
+  $('#moDaysSub').textContent = has
+    ? `deficit days · ${past.length - logged.length} not logged`
+    : 'deficit days';
+
+  $('#moAvg').textContent = has ? withSign(net / counted.length) : '—';
+  $('#moAvgSub').textContent = has ? 'net per logged day' : 'net per day';
+
+  $('#moEaten').textContent = has ? kcal(eaten / counted.length) : '—';
+  $('#moEatenSub').textContent = has
+    ? `eaten / day · ${withSign(eaten / counted.length - state.settings.dailyTarget)} vs target`
+    : 'eaten / day';
+
+  $('#moTotals').textContent = has
+    ? `${kcal(eaten)} eaten · ${kcal(active)} activity · ${kcal(allowance)} allowance over ${counted.length} day${counted.length === 1 ? '' : 's'}`
+      + (pending ? ' — today joins at ' + fmtHour(SETTLE_HOUR) : '')
+    : '';
+
+  renderCalendar(rows);
+  renderMonthTrend(rows, counted);
+
+  // Keep the detail panel on a day inside this month.
+  if (!monthSel || monthOf(monthSel) !== monthCursor) {
+    monthSel = monthCursor === thisMonth ? t
+      : (logged.length ? logged[logged.length - 1].key : days[days.length - 1]);
+  }
+  renderMonthDetail();
+}
+
+function renderCalendar(rows) {
+  const t = todayKey();
+  const grid = $('#calGrid');
+  grid.textContent = '';
+
+  const ws = state.settings.weekStart;
+  for (let i = 0; i < 7; i++) grid.append(el('div', 'cal-dow', DOW[(ws + i) % 7].slice(0, 1)));
+
+  const lead = (parseKey(rows[0].key).getDay() - ws + 7) % 7;
+  for (let i = 0; i < lead; i++) grid.append(el('div', 'cal-pad'));
+
+  rows.forEach(r => {
+    const future = r.key > t;
+    const cell = el('button', 'cal-day');
+    cell.type = 'button';
+    cell.disabled = future;
+    if (r.key === t) cell.classList.add('today');
+    if (r.key === monthSel) cell.classList.add('sel');
+    if (!r.logged) cell.classList.add('blank');
+    cell.setAttribute('aria-label', r.logged
+      ? `${fmtLong(r.key)}: ${kcal(r.eaten)} eaten, net ${withSign(r.net)}`
+      : `${fmtLong(r.key)}: nothing logged`);
+
+    cell.append(ringSvg(r, r.key === t));
+    cell.append(el('span', 'cal-num', String(parseKey(r.key).getDate())));
+    const net = el('span', 'cal-net', r.logged ? withSign(r.net) : '');
+    // A day still going is not a deficit yet — show its number uncoloured.
+    if (r.logged) net.classList.add(r.key === t && !todaySettled() ? 'live' : r.net > 0 ? 'pos' : 'neg');
+    cell.append(net);
+
+    cell.onclick = () => { monthSel = r.key; renderCalendarSel(); renderMonthDetail(); };
+    cell.ondblclick = () => { goToDay(r.key); showView('today'); };
+    cell.dataset.key = r.key;
+    grid.append(cell);
+  });
+}
+
+function renderCalendarSel() {
+  document.querySelectorAll('#calGrid .cal-day').forEach(c =>
+    c.classList.toggle('sel', c.dataset.key === monthSel));
+}
+
+/* Running total of net across the month: where the month's balance stood
+   on each day. Unlogged days carry the line flat rather than counting as
+   zero-calorie deficits. */
+function renderMonthTrend(rows, counted) {
+  const box = $('#moTrend');
+  box.textContent = '';
+  const ok = new Set(counted.map(r => r.key));
+  if (!ok.size) { box.append(el('p', 'empty', 'Log a few days to see the running balance.')); return; }
+
+  let run = 0;
+  const pts = [];
+  rows.forEach((r, i) => {
+    if (ok.has(r.key)) run += r.net;
+    if (r.key <= todayKey()) pts.push([i, run]);
+  });
+  const W = 300, H = 90, P = 4;
+  const lo = Math.min(0, ...pts.map(p => p[1])), hi = Math.max(0, ...pts.map(p => p[1]));
+  const span = hi - lo || 1;
+  const x = i => P + (i / Math.max(1, rows.length - 1)) * (W - 2 * P);
+  const y = v => P + ((hi - v) / span) * (H - 2 * P);
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'trend');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', `Running balance, ending at ${withSign(run)} kcal`);
+
+  const zero = document.createElementNS(NS, 'line');
+  zero.setAttribute('x1', 0); zero.setAttribute('x2', W);
+  zero.setAttribute('y1', y(0)); zero.setAttribute('y2', y(0));
+  zero.setAttribute('class', 'trend-zero');
+  const line = document.createElementNS(NS, 'polyline');
+  line.setAttribute('points', pts.map(([i, v]) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' '));
+  line.setAttribute('class', 'trend-line ' + (run > 0 ? 'over' : 'under'));
+  svg.append(zero, line);
+  box.append(svg);
+
+  const foot = el('div', 'trend-foot');
+  foot.append(el('span', null, fmtShort(rows[0].key)),
+              el('span', run > 0 ? 'pos' : 'neg', `${withSign(run)} kcal`),
+              el('span', null, fmtShort(rows[rows.length - 1].key)));
+  box.append(foot);
+}
+
+function renderMonthDetail() {
+  const k = monthSel;
+  const s = summaryOf(k);
+  $('#moSelLabel').textContent = fmtLong(k);
+  $('#moSelEaten').textContent = s.logged ? kcal(s.eaten) : '—';
+  $('#moSelActive').textContent = s.active ? kcal(s.active) : '—';
+  $('#moSelAllow').textContent = s.logged ? kcal(s.allowance) : '—';
+  const n = $('#moSelNet');
+  const live = k === todayKey() && !todaySettled();
+  n.className = !s.logged || live ? '' : s.net > 0 ? 'pos' : 'neg';
+  n.textContent = s.logged ? withSign(s.net) : '—';
+  $('#moSelVerdict').textContent = !s.logged ? 'Nothing logged'
+    : live ? 'Day still going'
+    : s.net > 0 ? 'Surplus' : 'Deficit';
+}
+
 /* ═════════════════════  Samsung Health CSV import  ═════════════════════
    Samsung Health has no public web API — the Health Data SDK is an
    Android-native, partner-approved thing, so a website can't read it live.
@@ -942,7 +1154,7 @@ let view = 'today';
 
 function showView(name) {
   view = name;
-  ['today', 'week', 'settings'].forEach(v => {
+  ['today', 'week', 'month', 'settings'].forEach(v => {
     document.getElementById('view-' + v).hidden = v !== name;
   });
   document.querySelectorAll('.tab').forEach(t => {
@@ -954,6 +1166,7 @@ function showView(name) {
 function render() {
   renderToday();
   renderWeek();
+  renderMonth();
   renderSettings();
 }
 
@@ -976,6 +1189,8 @@ function goToDay(k) {
   cursor = k;
   followToday = (k === todayKey());
   syncWeekToCursor();
+  monthCursor = monthOf(k);
+  monthSel = k;
   render();
 }
 function syncWeekToCursor() { weekCursor = startOfWeek(cursor, state.settings.weekStart); }
@@ -987,6 +1202,14 @@ $('#nextWeek').onclick = () => {
   if (weekCursor >= thisWeek) return;
   weekCursor = addDays(weekCursor, 7); renderWeek();
 };
+
+// Month navigation
+$('#prevMonth').onclick = () => { monthCursor = addMonths(monthCursor, -1); renderMonth(); };
+$('#nextMonth').onclick = () => {
+  if (monthCursor >= monthOf(todayKey())) return;
+  monthCursor = addMonths(monthCursor, 1); renderMonth();
+};
+$('#moOpenDay').onclick = () => { goToDay(monthSel); showView('today'); };
 
 // Add food
 $('#addForm').onsubmit = e => {
@@ -1083,7 +1306,7 @@ $('#wipeBtn').onclick = () => {
    if they deliberately opened a past day, leave them on it. */
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) return;
-  if (followToday && cursor !== todayKey()) { cursor = todayKey(); syncWeekToCursor(); }
+  if (followToday && cursor !== todayKey()) { cursor = todayKey(); syncWeekToCursor(); monthCursor = monthOf(cursor); monthSel = null; }
   render();
 });
 
