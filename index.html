@@ -32,7 +32,10 @@
     <div class="daynav card">
       <button class="iconbtn" id="prevDay" aria-label="Previous day">&#8249;</button>
       <div class="daynav-label">
-        <input type="date" id="datePicker" aria-label="Selected date">
+        <label class="datebtn">
+          <strong id="dateText"></strong>
+          <input type="date" id="datePicker" aria-label="Selected date">
+        </label>
         <span class="daynav-rel" id="dayRelative"></span>
       </div>
       <button class="iconbtn" id="nextDay" aria-label="Next day">&#8250;</button>
@@ -82,7 +85,7 @@
         <input type="text" id="fName" placeholder="Meal or item" required aria-label="Meal or item name" list="favourites">
         <datalist id="favourites"></datalist>
         <input type="number" id="fCals" placeholder="kcal" inputmode="numeric" min="0" step="1" required aria-label="Calories">
-        <input type="number" id="fQty" value="1" min="0.25" step="0.25" inputmode="decimal" aria-label="Servings" title="Servings">
+        <label class="qty" title="Servings"><span aria-hidden="true">&times;</span><input type="number" id="fQty" value="1" min="0.25" step="0.25" inputmode="decimal" aria-label="Servings"></label>
         <button type="submit" class="btn primary">Add</button>
       </form>
       <div class="quickadd" id="quickAdd"></div>
@@ -238,7 +241,7 @@
           gone.</b> Use the same passphrase on your other device to pair them.
         </p>
         <form id="syncForm" class="btnrow" autocomplete="on">
-          <input type="password" id="syncPass" placeholder="Passphrase (8+ characters)"
+          <input type="password" id="syncPass" placeholder="Passphrase, 8+ chars"
                  autocomplete="current-password" aria-label="Sync passphrase" style="flex:1;min-width:180px">
           <button type="submit" class="btn primary">Turn on sync</button>
         </form>
