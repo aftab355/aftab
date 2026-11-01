@@ -235,3 +235,43 @@ input[type=password]{
   background:var(--bg);color:var(--ink);font-size:16px;
 }
 #syncStatus{margin-top:12px}
+
+/* ---------- month ---------- */
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px 2px}
+.cal-dow{text-align:center;font-size:11px;font-weight:620;color:var(--ink-3);padding-bottom:4px;border-bottom:1px solid var(--line-soft);margin-bottom:4px}
+.cal-pad{min-height:1px}
+.cal-day{
+  appearance:none;border:1px solid transparent;background:transparent;color:var(--ink);
+  font:inherit;display:flex;flex-direction:column;align-items:center;gap:1px;
+  padding:4px 0 3px;border-radius:12px;cursor:pointer;min-width:0;position:relative;
+}
+.cal-day:disabled{cursor:default;opacity:.35}
+.cal-day.sel{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.cal-day.today .cal-num{color:var(--accent);font-weight:700}
+.ring{width:100%;max-width:40px;aspect-ratio:1}
+.ring circle{fill:none;stroke-width:4.5}
+.ring-track{stroke:var(--line-soft)}
+.cal-day.blank .ring-track{stroke:var(--line);stroke-dasharray:2 3}
+.ring-arc{stroke-linecap:round;transition:stroke-dasharray .3s ease}
+.ring-arc.under{stroke:var(--good)}
+.ring-arc.over{stroke:var(--over)}
+.ring-arc.live{stroke:var(--accent)}
+.cal-num{position:absolute;top:4px;left:0;right:0;height:min(40px,calc(100% - 22px));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.cal-net{font-size:9.5px;line-height:1.2;min-height:1.2em;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;letter-spacing:-.2px}
+.cal-hint{font-size:11px;color:var(--ink-3);margin:10px 0 0;text-align:center}
+.sw-under{background:var(--good)}
+.sw-over{background:var(--over)}
+.modetail{justify-content:space-between}
+.modetail>div{min-width:0!important}
+.modetail strong{font-size:17px}
+.modetail strong.pos{color:var(--over)}
+.modetail strong.neg{color:var(--good)}
+.trend{width:100%;height:110px;display:block}
+.trend-zero{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:3 3;vector-effect:non-scaling-stroke}
+.trend-line{fill:none;stroke-width:2.2;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.trend-line.under{stroke:var(--good)}
+.trend-line.over{stroke:var(--over)}
+.trend-foot{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:4px;font-variant-numeric:tabular-nums}
+.trend-foot .pos,.trend-foot .neg{font-size:12px}
+@media (max-width:420px){.tab{padding:6px 9px}.brand{font-size:15px}}
+.cal-net.live{color:var(--ink-3)}

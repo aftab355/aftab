@@ -28,6 +28,16 @@ The weekly figures only count days you actually logged — otherwise every
 not-yet-happened day in the current week would read as a full-target deficit
 and the weekly number would be meaningless by Tuesday.
 
+The **Month** view is a calendar of the same net, one ring per day: the ring
+fills with eaten as a share of that day's allowance, green while under it and
+red once over, with the day's net printed underneath. Above it are the
+month's net (with a rough fat equivalent at 7700 kcal/kg — a rule of thumb,
+not a prediction), deficit days out of logged days, and average net and
+intake per logged day. Below it, tapping a day shows its breakdown, and a
+running-balance line shows how the month's net built up. It follows the
+Week rules: unlogged days count for nothing rather than as deficits, and
+today stays out of the totals (and uncoloured) until it settles.
+
 ## Samsung Health
 
 **Samsung Health has no public web API.** The current Samsung Health Data SDK is

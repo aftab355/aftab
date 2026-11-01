@@ -18,6 +18,7 @@
     <nav class="tabs" role="tablist">
       <button class="tab" role="tab" data-view="today" aria-selected="true">Today</button>
       <button class="tab" role="tab" data-view="week" aria-selected="false">Week</button>
+      <button class="tab" role="tab" data-view="month" aria-selected="false">Month</button>
       <button class="tab" role="tab" data-view="settings" aria-selected="false">Settings</button>
     </nav>
   </div>
@@ -129,6 +130,49 @@
           <tbody id="weekTableBody"></tbody>
         </table>
       </div>
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────  MONTH  ───────────────────────────── -->
+  <section id="view-month" class="view" hidden>
+
+    <div class="daynav card">
+      <button class="iconbtn" id="prevMonth" aria-label="Previous month">&#8249;</button>
+      <div class="daynav-label"><strong id="monthLabel"></strong><span class="daynav-rel" id="monthRelative"></span></div>
+      <button class="iconbtn" id="nextMonth" aria-label="Next month">&#8250;</button>
+    </div>
+
+    <div class="stats">
+      <div class="card stat" id="moNetCard"><span class="stat-label">Net</span><strong class="stat-val" id="moNet">0</strong><span class="stat-sub" id="moNetSub">balance</span></div>
+      <div class="card stat"><span class="stat-label">On track</span><strong class="stat-val" id="moDays">0</strong><span class="stat-sub" id="moDaysSub">deficit days</span></div>
+      <div class="card stat"><span class="stat-label">Avg net</span><strong class="stat-val" id="moAvg">0</strong><span class="stat-sub" id="moAvgSub">per logged day</span></div>
+      <div class="card stat"><span class="stat-label">Avg eaten</span><strong class="stat-val" id="moEaten">0</strong><span class="stat-sub" id="moEatenSub">per day</span></div>
+    </div>
+    <p class="wk-note" id="moTotals"></p>
+
+    <div class="card">
+      <div class="card-head"><h2>Calendar</h2><span class="pill legend"><i class="sw-under"></i>deficit <i class="sw-over"></i>surplus</span></div>
+      <div class="cal" id="calGrid"></div>
+      <p class="cal-hint">Ring = eaten as a share of that day&rsquo;s allowance. Tap a day for details.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2 id="moSelLabel">Day</h2>
+        <span class="pill" id="moSelVerdict"></span>
+      </div>
+      <div class="sumrow modetail">
+        <div><span class="sum-label">Eaten</span><strong id="moSelEaten">0</strong></div>
+        <div><span class="sum-label">Activity</span><strong id="moSelActive">0</strong></div>
+        <div><span class="sum-label">Allowance</span><strong id="moSelAllow">0</strong></div>
+        <div><span class="sum-label">Net</span><strong id="moSelNet">0</strong></div>
+      </div>
+      <div class="btnrow" style="margin-top:12px"><button class="btn" id="moOpenDay">Open this day</button></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Running balance</h2></div>
+      <div id="moTrend"></div>
     </div>
   </section>
 
