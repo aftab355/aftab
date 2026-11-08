@@ -4,7 +4,8 @@
 'use strict';
 
 const KEY = 'calorie-tracker/v1';
-const DEFAULTS = { dailyTarget: 2550, maintenance: 2600, activityFactor: 0.75, weekStart: 1 };
+const DEFAULTS = { dailyTarget: 2550, maintenance: 2600, activityFactor: 0.75, weekStart: 1, weightUnit: 'kg' };
+const WEIGHT_UNITS = ['kg', 'lb', 'st'];
 
 /* The target is one fixed number. Older saves (and older devices still
    syncing) carry baseCalories/activityMultiplier from when the target grew
@@ -19,7 +20,8 @@ function cleanSettings(s) {
     dailyTarget: Number.isFinite(t) && t > 0 ? t : DEFAULTS.dailyTarget,
     maintenance: Number.isFinite(m) && m > 0 ? m : DEFAULTS.maintenance,
     activityFactor: Number.isFinite(f) && f >= 0 && f <= 2 ? f : DEFAULTS.activityFactor,
-    weekStart: w === 0 || w === 1 ? w : DEFAULTS.weekStart
+    weekStart: w === 0 || w === 1 ? w : DEFAULTS.weekStart,
+    weightUnit: WEIGHT_UNITS.includes(src.weightUnit) ? src.weightUnit : DEFAULTS.weightUnit
   };
 }
 
@@ -96,7 +98,7 @@ function pruneTombstones() {
   const cutoff = addDays(todayKey(), -90);
   for (const k of Object.keys(state.days)) {
     const d = state.days[k];
-    if (k < cutoff && !d.entries.length && !d.activity && !d.recorded) delete state.days[k];
+    if (k < cutoff && !d.entries.length && !d.activity && !d.recorded && !d.weight) delete state.days[k];
   }
 }
 
@@ -266,6 +268,8 @@ function renderActivityAndLists(s) {
   $('#activityNote').textContent =
     `Counts toward the day's net only — your target stays ${kcal(s.target)}.`;
 
+  renderWeightCard();
+
   renderEntries();
   renderQuickAdd();
 }
@@ -420,6 +424,344 @@ function setActivity(cals, source) {
     d.activity = Number.isFinite(cals) && cals > 0 ? { calories: Math.round(cals), source } : null;
   });
   render();
+}
+
+/* ─────────────────────────  weight  ─────────────────────────
+   Stored per day as day.weight = { kg, source }, always in kilograms (what
+   Samsung Health exports), and converted only for display. It lives inside
+   the day object rather than a separate map so that older copies of the app
+   still syncing on another device carry it through untouched — they merge
+   and re-upload whole day objects, but would drop a top-level field they
+   don't know about. A weigh-in does not make a day "logged": calorie totals
+   are unaffected by it. */
+const LB_PER_KG = 2.2046226218;
+const wUnit = () => state.settings.weightUnit;
+
+function weightOf(k) {
+  const w = dayOf(k).weight;
+  return w && Number.isFinite(w.kg) && w.kg > 0 ? w : null;
+}
+
+/* Every weigh-in, oldest first, as { key, kg, source }. */
+function allWeights() {
+  return Object.keys(state.days).sort()
+    .map(k => { const w = weightOf(k); return w ? { key: k, kg: w.kg, source: w.source } : null; })
+    .filter(Boolean);
+}
+
+function fmtWeight(kg, { unit = true } = {}) {
+  if (!Number.isFinite(kg)) return '—';
+  const u = wUnit();
+  if (u === 'st') {
+    const lb = kg * LB_PER_KG;
+    let st = Math.floor(lb / 14), rem = Math.round((lb - st * 14) * 10) / 10;
+    if (rem >= 14) { st++; rem = 0; }
+    return `${st} st ${rem.toFixed(1).replace(/\.0$/, '')}${unit ? ' lb' : ''}`;
+  }
+  const v = u === 'lb' ? kg * LB_PER_KG : kg;
+  return v.toFixed(1) + (unit ? ' ' + u : '');
+}
+
+/* Changes are shown in kg or lb; "−0.4 st" means nothing to anyone. */
+function fmtWeightDelta(kg) {
+  if (!Number.isFinite(kg)) return '—';
+  const lb = wUnit() !== 'kg';
+  const v = lb ? kg * LB_PER_KG : kg;
+  const r = Math.round(v * 10) / 10 || 0;
+  return (r > 0 ? '+' : r < 0 ? '−' : '±') + Math.abs(r).toFixed(1) + (lb ? ' lb' : ' kg');
+}
+
+/* The input box shows the stored weight in the chosen unit. */
+function weightToInput(kg) {
+  const u = wUnit();
+  if (u === 'kg') return (Math.round(kg * 10) / 10).toString();
+  const lb = kg * LB_PER_KG;
+  if (u === 'lb') return (Math.round(lb * 10) / 10).toString();
+  let st = Math.floor(lb / 14), rem = Math.round((lb - st * 14) * 10) / 10;
+  if (rem >= 14) { st++; rem = 0; }
+  return `${st} ${rem}`;
+}
+
+/* Reads what was typed, in the chosen unit, and returns kilograms (or NaN).
+   Stone accepts "13 4", "13st 4lb", "13-4" (13 st 4 lb) or a lone "13.5". */
+function parseWeightInput(raw) {
+  const t = String(raw).trim().replace(',', '.');
+  if (!t) return NaN;
+  const nums = (t.match(/\d+(?:\.\d+)?/g) || []).map(Number);
+  if (!nums.length || nums.length > 2) return NaN;
+  const u = wUnit();
+  if (u === 'st') return ((nums[0] * 14) + (nums[1] || 0)) / LB_PER_KG;
+  if (nums.length !== 1) return NaN;
+  return u === 'lb' ? nums[0] / LB_PER_KG : nums[0];
+}
+
+const WEIGHT_MIN_KG = 20, WEIGHT_MAX_KG = 350;
+const sensibleKg = kg => Number.isFinite(kg) && kg >= WEIGHT_MIN_KG && kg <= WEIGHT_MAX_KG;
+
+function setWeight(kg, source) {
+  mutateDay(cursor, d => {
+    if (Number.isFinite(kg)) d.weight = { kg: Math.round(kg * 100) / 100, source };
+    else delete d.weight;
+  });
+  render();
+}
+
+/* Smoothed trend: an exponentially weighted moving average, 10% per day.
+   Day-to-day scale readings swing a kilo or more on water and food in the
+   gut; the trend is what fat loss actually looks like. A gap of g days
+   applies g days' worth of weighting, so sparse weigh-ins aren't treated as
+   if they were consecutive. */
+const TREND_ALPHA = 0.1;
+function withTrend(points) {
+  let t = null, prev = null;
+  return points.map(p => {
+    if (t === null) t = p.kg;
+    else {
+      const gap = Math.max(1, Math.round((parseKey(p.key) - parseKey(prev)) / 864e5));
+      t += (1 - Math.pow(1 - TREND_ALPHA, gap)) * (p.kg - t);
+    }
+    prev = p.key;
+    return Object.assign({ trend: t }, p);
+  });
+}
+
+/* Least-squares line through the raw readings: slope in kg per day. Used for
+   "change" and "rate" because, unlike the moving average, it doesn't lag a
+   week or so behind. */
+function fitLine(points) {
+  if (points.length < 2) return null;
+  const x0 = parseKey(points[0].key);
+  const xs = points.map(p => Math.round((parseKey(p.key) - x0) / 864e5));
+  const ys = points.map(p => p.kg);
+  const n = xs.length, mx = xs.reduce((a, b) => a + b) / n, my = ys.reduce((a, b) => a + b) / n;
+  let sxx = 0, sxy = 0;
+  xs.forEach((x, i) => { sxx += (x - mx) ** 2; sxy += (x - mx) * (ys[i] - my); });
+  if (!sxx) return null;
+  const slope = sxy / sxx;
+  return { slope, span: xs[n - 1], at: x => my + slope * (x - mx) };
+}
+
+function renderWeightCard() {
+  const w = weightOf(cursor);
+  const u = wUnit();
+  const input = $('#weightInput');
+  // Stone needs a space between st and lb, which a number input can't hold.
+  input.type = u === 'st' ? 'text' : 'number';
+  input.placeholder = u === 'st' ? 'e.g. 13 4' : '—';
+  $('#weightLabel').textContent = `Weight (${u === 'st' ? 'st lb' : u})`;
+  if (document.activeElement !== input) input.value = w ? weightToInput(w.kg) : '';
+  $('#weightSource').textContent = !w ? 'not set' : (w.source === 'samsung' ? 'Samsung Health' : 'manual');
+
+  const all = withTrend(allWeights());
+  const before = all.filter(p => p.key < cursor).pop();
+  const here = all.find(p => p.key === cursor);
+  const bits = [];
+  if (before) {
+    const gap = Math.round((parseKey(cursor) - parseKey(before.key)) / 864e5);
+    bits.push(here
+      ? `${fmtWeightDelta(here.kg - before.kg)} since ${gap === 1 ? 'the day before' : fmtShort(before.key)}`
+      : `Last: ${fmtWeight(before.kg)} on ${fmtShort(before.key)}`);
+  }
+  const ref = here || before;
+  if (ref && all.length > 2) bits.push(`trend ${fmtWeight(ref.trend)}`);
+  $('#weightNote').textContent = bits.length ? bits.join(' · ')
+    : 'Weigh at the same time each day — first thing in the morning is most consistent.';
+}
+
+/* ─────────────────────────  weight view  ───────────────────────── */
+let weightRange = '90';
+try { const r = localStorage.getItem('calorie-tracker/weight-range'); if (['30', '90', '365', 'all'].includes(r)) weightRange = r; }
+catch { /* storage blocked */ }
+
+function renderWeight() {
+  document.querySelectorAll('#wtRange button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.range === weightRange)));
+
+  const all = withTrend(allWeights());
+  $('#wtEmptyState').hidden = all.length > 0;
+  $('#wtBody').hidden = all.length === 0;
+  if (!all.length) return;
+
+  const t = todayKey();
+  const start = weightRange === 'all' ? all[0].key : addDays(t, -(Number(weightRange) - 1));
+  const pts = all.filter(p => p.key >= start);
+  const last = all[all.length - 1];
+
+  $('#wtLatest').textContent = fmtWeight(last.kg, { unit: wUnit() !== 'st' });
+  $('#wtLatestSub').textContent = relativeLabel(last.key) === 'Today' ? 'today' : fmtShort(last.key);
+  $('#wtTrend').textContent = all.length > 2 ? fmtWeight(last.trend, { unit: wUnit() !== 'st' }) : '—';
+  $('#wtTrendSub').textContent = all.length > 2 ? 'smoothed · ' + (wUnit() === 'st' ? 'st lb' : wUnit()) : 'needs 3+ weigh-ins';
+
+  const fit = fitLine(pts);
+  const enough = fit && fit.span >= 7 && pts.length >= 3;
+  const change = enough ? fit.at(fit.span) - fit.at(0) : NaN;
+  const rate = enough ? fit.slope * 7 : NaN;
+  const setCard = (id, v) => {
+    $(id).classList.toggle('is-under', enough && v < 0);
+    $(id).classList.toggle('is-over', enough && v > 0);
+  };
+  setCard('#wtChangeCard', change);
+  setCard('#wtRateCard', rate);
+  $('#wtChange').textContent = enough ? fmtWeightDelta(change) : '—';
+  $('#wtChangeSub').textContent = enough ? `over ${fit.span} days` : 'needs a week of weigh-ins';
+  $('#wtRate').textContent = enough ? fmtWeightDelta(rate) : '—';
+  $('#wtRateSub').textContent = enough ? 'per week' + (weightRange === 'all' ? ' (average)' : '') : 'per week';
+
+  renderWeightChart(pts, start, t);
+  renderWeightCompare(pts, fit, enough);
+  renderWeightList(pts);
+}
+
+/* Drawn at the box's real pixel width (re-rendered on resize), so the dots
+   stay round and the labels stay text-sized on any screen. */
+function renderWeightChart(pts, start, end) {
+  const box = $('#wtChart');
+  box.textContent = '';
+  const W = Math.max(260, box.clientWidth || 320), H = 190;
+  const L = 44, R = 8, T = 10, B = 22;
+  const lb = wUnit() !== 'kg';
+  const conv = kg => lb ? kg * LB_PER_KG : kg;
+
+  const vals = pts.flatMap(p => [conv(p.kg), conv(p.trend)]);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  if (hi - lo < 2) { const mid = (hi + lo) / 2; lo = mid - 1; hi = mid + 1; }
+  const step = (wUnit() === 'st' ? [1, 2, 7, 14, 28] : [0.5, 1, 2, 5, 10, 20]).find(s => (hi - lo) / s <= 5) || 50;
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
+
+  const t0 = parseKey(start).getTime(), t1 = Math.max(parseKey(end).getTime(), t0 + 864e5);
+  const x = k => L + ((parseKey(k).getTime() - t0) / (t1 - t0)) * (W - L - R);
+  const y = v => T + ((hi - v) / (hi - lo)) * (H - T - B);
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs, text) => {
+    const n = document.createElementNS(NS, tag);
+    Object.entries(attrs).forEach(([a, v]) => n.setAttribute(a, v));
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  const svg = mk('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: 'wtsvg', role: 'img',
+    'aria-label': `Weight from ${fmtShort(pts[0].key)} to ${fmtShort(pts[pts.length - 1].key)}` });
+
+  for (let v = lo; v <= hi + 1e-9; v += step) {
+    svg.append(mk('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: 'wt-grid' }));
+    const whole = Math.round(v);
+    const label = wUnit() === 'st' ? `${Math.floor(whole / 14)}st ${whole % 14}` : (step < 1 ? v.toFixed(1) : String(whole));
+    svg.append(mk('text', { x: L - 6, y: y(v) + 3.5, class: 'wt-axis', 'text-anchor': 'end' }, label));
+  }
+  const mid = keyOf(new Date((t0 + t1) / 2));
+  [[start, 'start'], [mid, 'middle'], [end, 'end']].forEach(([k, anchor]) =>
+    svg.append(mk('text', { x: x(k), y: H - 6, class: 'wt-axis', 'text-anchor': anchor }, fmtShort(k))));
+
+  pts.forEach(p => {
+    const c = mk('circle', { cx: x(p.key), cy: y(conv(p.kg)), r: pts.length > 120 ? 2 : 3, class: 'wt-dot' });
+    c.append(mk('title', {}, `${fmtLong(p.key)}: ${fmtWeight(p.kg)}`));
+    svg.append(c);
+  });
+  if (pts.length > 1) {
+    svg.append(mk('polyline', { class: 'wt-line',
+      points: pts.map(p => `${x(p.key).toFixed(1)},${y(conv(p.trend)).toFixed(1)}`).join(' ') }));
+  }
+  box.append(svg);
+}
+
+/* What the calorie log predicted against what the scale did. The weigh-in
+   on day D reflects eating up to the end of D−1, so the net counted runs
+   from the first weigh-in's day up to (not including) the last one's. */
+function renderWeightCompare(pts, fit, enough) {
+  const box = $('#wtCompare');
+  box.textContent = '';
+  if (!enough) {
+    box.append(el('p', 'explain', 'Needs at least three weigh-ins spread over a week or more in this range.'));
+    return;
+  }
+  const first = pts[0].key, lastKey = pts[pts.length - 1].key;
+  let span = 0, logged = 0, net = 0;
+  for (let k = first; k < lastKey; k = addDays(k, 1)) {
+    span++;
+    const s = summaryOf(k);
+    if (s.logged) { logged++; net += s.net; }
+  }
+  const coverage = span ? logged / span : 0;
+  const actual = fit.at(fit.span) - fit.at(0);
+
+  const rows = el('div', 'cmp');
+  const row = (label, value, sub, cls) => {
+    const r = el('div', 'cmp-row');
+    const v = el('strong', cls || null, value);
+    r.append(el('span', 'cmp-label', label), v);
+    if (sub) r.append(el('span', 'cmp-sub', sub));
+    rows.append(r);
+  };
+  row('Scale', fmtWeightDelta(actual), `fitted line, ${fmtShort(first)} – ${fmtShort(lastKey)}`, actual > 0 ? 'pos' : 'neg');
+
+  if (!logged) {
+    row('Calorie log', '—', 'no logged days in this stretch');
+    box.append(rows);
+    return;
+  }
+  // Unlogged days are treated as averaging the same as logged ones. If they
+  // were really meals out and weekends, the prediction runs optimistic.
+  const predictedKg = (net / logged) * span / KCAL_PER_KG;
+  row('Calorie log', fmtWeightDelta(predictedKg),
+    `avg net ${withSign(net / logged)} kcal/day over ${logged} of ${span} days` +
+    (logged < span ? ', extended to all' : ''), predictedKg > 0 ? 'pos' : 'neg');
+  box.append(rows);
+
+  let verdict;
+  if (span < 21 || coverage < 0.8 || pts.length < 8) {
+    verdict = span < 21
+      ? `Too short to judge — ${span} days. Water swings alone can be ±1 kg; give it three weeks or more.`
+      : coverage < 0.8
+        ? `Only ${logged} of ${span} days logged, so the prediction is a guess. Log more consistently to make this meaningful.`
+        : 'Too few weigh-ins to judge. Several a week makes the line far more reliable.';
+  } else {
+    const gap = (actual - predictedKg) * KCAL_PER_KG / span;   // kcal/day the log is missing
+    const g = kcal(Math.abs(gap));
+    verdict = Math.abs(gap) < 150
+      ? `They agree to within ~${g} kcal/day — your maintenance (${kcal(state.settings.maintenance)}) and activity share (${state.settings.activityFactor}) look about right.`
+      : gap > 0
+        ? `The scale is about ${g} kcal/day behind what the log predicts. Usual reasons: food under-logged (oils, drinks, bites), activity overestimated, or maintenance set too high (currently ${kcal(state.settings.maintenance)}).`
+        : `You're losing about ${g} kcal/day more than the log predicts. Maintenance may be set too low (currently ${kcal(state.settings.maintenance)}) or activity counted too cautiously.`;
+  }
+  box.append(el('p', 'explain cmp-verdict', verdict));
+}
+
+/* The newest ten; the chart already shows the shape, so the full list is
+   one tap away rather than a wall of rows under it. */
+let weightListAll = false;
+function renderWeightList(pts) {
+  const list = $('#wtList');
+  list.textContent = '';
+  $('#wtCount').textContent = `${pts.length} in range`;
+  const shown = pts.slice().reverse().slice(0, weightListAll ? 400 : 10);
+  shown.forEach((p, i) => {
+    const prev = pts[pts.length - 2 - i];
+    const li = el('li', 'entry');
+    const main = el('div', 'entry-main');
+    const name = el('button', 'linkbtn entry-name', fmtLong(p.key));
+    name.type = 'button';
+    name.onclick = () => { goToDay(p.key); showView('today'); };
+    main.append(name, el('span', 'entry-sub',
+      (p.source === 'samsung' ? 'Samsung Health' : 'manual') + (prev ? ` · ${fmtWeightDelta(p.kg - prev.kg)}` : '')));
+    const del = el('button', 'mini del', '×');
+    del.title = 'Delete'; del.setAttribute('aria-label', `Delete weigh-in for ${fmtLong(p.key)}`);
+    del.onclick = () => {
+      if (!confirm(`Delete the ${fmtWeight(p.kg)} weigh-in on ${fmtLong(p.key)}?`)) return;
+      mutateDay(p.key, d => { delete d.weight; });
+      render();
+      toast('Weigh-in deleted');
+    };
+    li.append(main, el('span', 'entry-cal', fmtWeight(p.kg)), del);
+    list.append(li);
+  });
+  if (pts.length > 10) {
+    const li = el('li', 'entry');
+    const more = el('button', 'btn', weightListAll ? 'Show fewer' : `Show ${Math.min(pts.length, 400) - shown.length} more`);
+    more.type = 'button';
+    more.onclick = () => { weightListAll = !weightListAll; renderWeightList(pts); };
+    li.append(more);
+    list.append(li);
+  }
 }
 
 /* ─────────────────────────  week view  ─────────────────────────
@@ -1069,6 +1411,155 @@ function extractActivity(text, filename) {
   };
 }
 
+/* Samsung Health weight export: com.samsung.health.weight.<stamp>.csv.
+   Weight is always kilograms there, whatever unit the app displays. Column
+   names come bare (`weight`, `start_time`) or prefixed
+   (`com.samsung.health.weight.weight`), so match on the ending.
+
+   Times in these exports are UTC, with the local offset in a separate
+   `time_offset` column ("UTC+0100"). Taking the date straight off the
+   timestamp would file a 00:30 BST weigh-in under the previous day, so the
+   offset is applied first. Without that column the browser's own time zone
+   is used. Several readings on one day (a scale and the phone both writing,
+   or a re-weigh) collapse to the latest, which is what Samsung Health shows. */
+const WEIGHT_COL = /(^|_)weight$/;
+const WEIGHT_REJECT = /goal|target|ideal|height|lean|fat|muscle|mass|water|bone/;
+
+function looksLikeWeightFile(rows, filename) {
+  const h = findHeader(rows);
+  const header = rows[h].map(norm);
+  const hasWeight = pickColumn(header, [WEIGHT_COL], WEIGHT_REJECT) !== -1;
+  const named = /(^|_)weight(_|$)/.test(norm((rows[0] || []).join(' ') + ' ' + filename));
+  const hasCalories = pickColumn(header, [/calorie/], /rest|basal|bmr|tef|goal|target/) !== -1;
+  return hasWeight && (named || !hasCalories);
+}
+
+function parseOffsetMinutes(raw) {
+  const m = String(raw || '').match(/([+-])(\d{1,2}):?(\d{2})?/);
+  return m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] || 0)) : null;
+}
+
+/* Returns { key, ms } — the local day, and an instant for ordering readings. */
+function weightTimeOf(raw, offsetRaw) {
+  const v = String(raw).trim();
+  if (/^\d{10,13}$/.test(v)) {
+    const ms = v.length <= 10 ? Number(v) * 1000 : Number(v);
+    const off = parseOffsetMinutes(offsetRaw);
+    if (off === null) return { key: keyOf(new Date(ms)), ms };
+    const d = new Date(ms + off * 60000);
+    return { key: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, ms };
+  }
+  const m = v.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+  if (!m) return null;
+  if (m[4] === undefined) return { key: `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`, ms: Date.UTC(+m[1], +m[2] - 1, +m[3]) };
+  const ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+  const off = parseOffsetMinutes(offsetRaw);
+  if (off === null) return { key: keyOf(new Date(ms)), ms };
+  const d = new Date(ms + off * 60000);
+  return { key: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, ms };
+}
+
+function extractWeight(rows) {
+  const h = findHeader(rows);
+  const header = rows[h].map(norm);
+  const dateIdx = pickColumn(header, [
+    /(^|_)start_time$/, /(^|_)day_time$/, /(^|_)create_time$/, /(^|_)date$/, /time/
+  ], /offset|update/);
+  const wIdx = pickColumn(header, [WEIGHT_COL], WEIGHT_REJECT);
+  const offIdx = pickColumn(header, [/(^|_)time_offset$/]);
+  if (dateIdx === -1 || wIdx === -1) {
+    throw new Error('Could not find a date and a weight column. Columns seen: ' +
+      header.filter(Boolean).slice(0, 12).join(', '));
+  }
+
+  const t = todayKey();
+  const byDay = new Map();
+  let skipped = 0;
+  for (let i = h + 1; i < rows.length; i++) {
+    const when = weightTimeOf(rows[i][dateIdx], offIdx === -1 ? null : rows[i][offIdx]);
+    const kg = Number(String(rows[i][wIdx]).trim());
+    if (!when || when.key > t || !sensibleKg(kg)) { if (String(rows[i][wIdx]).trim()) skipped++; continue; }
+    const prev = byDay.get(when.key);
+    if (!prev || when.ms >= prev.ms) byDay.set(when.key, { ms: when.ms, kg });
+  }
+  if (!byDay.size) throw new Error('Found the weight column, but no usable readings in it.');
+
+  return {
+    skipped,
+    rows: [...byDay.entries()]
+      .map(([date, r]) => ({ date, kg: Math.round(r.kg * 100) / 100 }))
+      .sort((a, b) => b.date.localeCompare(a.date))
+  };
+}
+
+function buildWeightPreview(parsed) {
+  const wrap = el('div', 'preview');
+  const rows = parsed.rows;
+  // A weight typed in by hand is a deliberate correction; an import never
+  // overrides it. Earlier Samsung imports are refreshed.
+  const manual = rows.filter(r => { const w = weightOf(r.date); return w && w.source !== 'samsung'; });
+  const keep = new Set(manual.map(r => r.date));
+  const usable = rows.filter(r => !keep.has(r.date));
+
+  const table = el('table');
+  rows.slice(0, 14).forEach(r => {
+    const tr = el('tr');
+    tr.append(el('td', null, fmtLong(r.date)));
+    if (keep.has(r.date)) {
+      tr.className = 'muted';
+      tr.append(el('td', 'hist-flag', `manual ${fmtWeight(weightOf(r.date).kg)} kept`));
+    } else {
+      const td = el('td');
+      const input = document.createElement('input');
+      input.type = wUnit() === 'st' ? 'text' : 'number';
+      input.step = '0.1';
+      input.value = weightToInput(r.kg);
+      input.setAttribute('aria-label', `Weight for ${r.date}`);
+      input.onchange = () => { r.kg = parseWeightInput(input.value); };
+      td.append(input);
+      tr.append(td);
+    }
+    table.append(tr);
+  });
+  wrap.append(table);
+  if (rows.length > 14) wrap.append(el('p', 'explain', `+ ${rows.length - 14} older weigh-ins will also be saved.`));
+
+  const bar = el('div', 'btnrow');
+  bar.style.marginTop = '12px';
+  const ok = el('button', 'btn primary', `Save ${usable.length} weigh-in${usable.length === 1 ? '' : 's'}`);
+  ok.disabled = !usable.length;
+  ok.onclick = async () => {
+    ok.disabled = true;
+    // Bring in another device's edits first: per-day last-write-wins would
+    // otherwise let this import overwrite food logged elsewhere on those days.
+    if (syncKey) await pullAndMerge({ quiet: true });
+    const now = Date.now();
+    let n = 0;
+    usable.forEach(r => {
+      if (!sensibleKg(r.kg)) return;
+      const day = state.days[r.date] || (state.days[r.date] = { entries: [], activity: null });
+      const cur = day.weight;
+      if (cur && cur.source !== 'samsung') return;
+      const kg = Math.round(r.kg * 100) / 100;
+      if (cur && cur.kg === kg) { n++; return; }   // unchanged: don't touch the day's timestamp
+      day.weight = { kg, source: 'samsung' };
+      day.u = now;
+      n++;
+    });
+    save();
+    queuePush();
+    $('#importResult').textContent = '';
+    $('#importResult').append(note('ok', `Saved ${n} weigh-in${n === 1 ? '' : 's'}. See them in the Weight tab.`));
+    render();
+    toast(`Imported ${n} weigh-in${n === 1 ? '' : 's'} from Samsung Health`);
+  };
+  const cancel = el('button', 'btn', 'Cancel');
+  cancel.onclick = () => { $('#importResult').textContent = ''; };
+  bar.append(ok, cancel);
+  wrap.append(bar);
+  return { wrap, manual: manual.length };
+}
+
 function handleFile(file) {
   const box = $('#importResult');
   const reader = new FileReader();
@@ -1076,9 +1567,29 @@ function handleFile(file) {
   reader.onerror = () => { box.innerHTML = ''; box.append(note('bad', 'Could not read that file.')); };
   reader.onload = () => {
     box.textContent = '';
+    const text = String(reader.result);
+    const csvRows = parseCSV(text);
+
+    if (csvRows.length >= 2 && looksLikeWeightFile(csvRows, file.name)) {
+      let w;
+      try { w = extractWeight(csvRows); }
+      catch (err) { box.append(note('bad', err.message)); return; }
+      const { wrap, manual } = buildWeightPreview(w);
+      const r = w.rows;
+      box.append(note('ok',
+        `Weight file: ${r.length} day${r.length === 1 ? '' : 's'} with a weigh-in, ` +
+        `${fmtShort(r[r.length - 1].date)} – ${fmtShort(r[0].date)}` +
+        (r.length > 1 ? `, ${fmtWeight(r[r.length - 1].kg)} → ${fmtWeight(r[0].kg)}` : '') + '. ' +
+        (manual ? `${manual} day${manual === 1 ? '' : 's'} you entered by hand ${manual === 1 ? 'is' : 'are'} kept. ` : '') +
+        (w.skipped ? `${w.skipped} reading${w.skipped === 1 ? '' : 's'} skipped as out of range or in the future. ` : '') +
+        'Check the numbers, then save.'));
+      box.append(wrap);
+      return;
+    }
+
     let parsed;
     try {
-      parsed = extractActivity(String(reader.result), file.name);
+      parsed = extractActivity(text, file.name);
     } catch (err) {
       box.append(note('bad', err.message));
       return;
@@ -1322,6 +1833,7 @@ function renderSettings() {
   $('#setMaint').value = state.settings.maintenance;
   $('#setFactor').value = state.settings.activityFactor;
   $('#setWeekStart').value = String(state.settings.weekStart);
+  $('#setWeightUnit').value = state.settings.weightUnit;
 }
 
 function exportBackup() {
@@ -1370,19 +1882,22 @@ let view = 'today';
 
 function showView(name) {
   view = name;
-  ['today', 'week', 'month', 'settings'].forEach(v => {
+  ['today', 'week', 'month', 'weight', 'settings'].forEach(v => {
     document.getElementById('view-' + v).hidden = v !== name;
   });
   document.querySelectorAll('.tab').forEach(t => {
     t.setAttribute('aria-selected', String(t.dataset.view === name));
   });
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+  // The chart is sized to its box, which has no width while the tab is hidden.
+  if (name === 'weight') renderWeight();
 }
 
 function render() {
   renderToday();
   renderWeek();
   renderMonth();
+  renderWeight();
   renderSettings();
 }
 
@@ -1452,7 +1967,40 @@ $('#activityInput').onchange = e => {
   setActivity(Number.isFinite(v) ? v : 0, 'manual');
 };
 
+// Weight — commit on change, like activity. Clearing the box removes it.
+$('#weightInput').onchange = e => {
+  const raw = e.target.value.trim();
+  if (!raw) { if (weightOf(cursor)) { setWeight(NaN); toast('Weight removed'); } return; }
+  const kg = parseWeightInput(raw);
+  if (!sensibleKg(kg)) {
+    toast(wUnit() === 'st' ? 'Type stone and pounds, e.g. 13 4' : `That doesn't look like a weight in ${wUnit()}`);
+    renderWeightCard();
+    return;
+  }
+  setWeight(kg, 'manual');
+  toast(`Weight saved · ${fmtWeight(kg)}`);
+};
+document.querySelectorAll('#wtRange button').forEach(b => {
+  b.onclick = () => {
+    weightRange = b.dataset.range;
+    try { localStorage.setItem('calorie-tracker/weight-range', weightRange); } catch { /* storage blocked */ }
+    renderWeight();
+  };
+});
+$('#wtGoToday').onclick = () => { goToDay(todayKey()); showView('today'); setTimeout(() => $('#weightInput').focus(), 50); };
+$('#wtGoImport').onclick = () => { showView('settings'); $('#dropZone').scrollIntoView({ block: 'center' }); };
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (view === 'weight') renderWeight(); }, 150);
+});
+
 // Settings
+$('#setWeightUnit').onchange = e => {
+  state.settings.weightUnit = e.target.value;
+  state.settingsU = Date.now();
+  save(); queuePush(); render();
+};
 $('#setTarget').onchange = e => {
   const v = Number(e.target.value);
   if (Number.isFinite(v) && v > 0) { state.settings.dailyTarget = Math.round(v); state.settingsU = Date.now(); save(); queuePush(); }

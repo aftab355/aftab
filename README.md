@@ -53,6 +53,35 @@ Week and Month; eaten, activity and allowance totals cover only days with
 food logged, and the cards say how many that was. Logging food on an
 imported day replaces its recorded net, and Today has a button to remove it.
 
+## Weight
+
+Type a weigh-in into the **Weight** box on Today (any day), or import your
+Samsung Health weight history (below). Units are kg, lb, or stone and pounds
+(Settings); in stone, type `13 4` for 13 st 4 lb. Weights are always stored
+in kg, so switching unit never changes the data. A weigh-in does not make a
+day count as logged: calorie totals ignore it.
+
+The **Weight** tab shows, for 30 days / 90 days / 1 year / all:
+
+- **Latest** reading and the **trend**: a moving average (10% per day,
+  gap-aware). Daily readings swing a kilo or more on water alone; the trend
+  is the number to watch.
+- **Change** and **rate per week** from a straight line fitted through the
+  readings, which doesn't lag the way the moving average does. Needs at least
+  three weigh-ins across a week.
+- A chart of every weigh-in (dots) with the trend line.
+- **Calories vs scale**: what your logged net predicted (at 7700 kcal/kg)
+  against what the fitted line shows. A weigh-in on day D reflects eating up
+  to the end of D−1, so the net counted runs from the first weigh-in's day to
+  the day before the last one. Unlogged days are assumed to average the same
+  as logged ones, and that assumption is the weak point: if they were your
+  takeaway days, the prediction is too optimistic. It gives a verdict only
+  when it has 21+ days, 80%+ of them logged and 8+ weigh-ins; otherwise it
+  says why not. A persistent gap usually means food is under-logged, activity
+  is overcounted, or maintenance is set wrong. It's a rough calibration, not
+  a measurement.
+- The weigh-ins, newest first; tap one to open that day, × to delete.
+
 ## Samsung Health
 
 **Samsung Health has no public web API.** The current Samsung Health Data SDK is
@@ -68,7 +97,22 @@ The supported route is the data export:
 3. In this app: **Settings → Samsung Health import**, drop in a CSV
 
 Files that work: `com.samsung.shealth.calories_burned.details.*.csv` (best),
-`com.samsung.health.step_daily_trend.*.csv`, `com.samsung.shealth.exercise.*.csv`.
+`com.samsung.health.step_daily_trend.*.csv`, `com.samsung.shealth.exercise.*.csv`
+for activity, and `com.samsung.health.weight.*.csv` for weight. The same drop
+zone takes all of them and works out which kind it was given.
+
+There is no automatic transfer: to bring in newer weigh-ins, export again and
+drop the new weight file in. Re-importing is safe: days already imported are
+refreshed, a weight you typed in by hand is never overwritten, and unchanged
+days are left untouched so they don't win a sync conflict against another
+device. The import pulls from the sync server first, for the same reason.
+
+Weight specifics: Samsung stores kg whatever unit its app shows. Timestamps are
+UTC with the local offset in a `time_offset` column; the offset is applied
+before picking the day, so a 00:30 weigh-in isn't filed under the previous
+date. Several readings on one day (scale plus phone, or a re-weigh) collapse
+to the latest. Readings outside 20–350 kg, or dated in the future, are
+skipped and counted in the preview.
 
 The parser sniffs rather than assumes, because Samsung moves columns between
 app versions. It skips the metadata line those exports start with, matches the
