@@ -1,5 +1,6 @@
 import type { Config, Context } from '@netlify/functions';
 import { getStore } from '@netlify/blobs';
+import { mergeDocs } from '../lib/merge.mjs';
 
 /* Server-side storage so a day's log is not trapped in one browser.
  *
@@ -8,6 +9,16 @@ import { getStore } from '@netlify/blobs';
  * the device, and the server stores nothing that identifies anyone. The key
  * is therefore the whole credential: whoever holds it can read and write that
  * document, which is why the client enforces a passphrase length floor.
+ *
+ * PUT merges into what is stored rather than replacing it (see
+ * ../lib/merge.mjs), and returns the merged document so the writer can pick
+ * up anything another device added. GET advertises `merge: 1`; the Android
+ * weight-sync app sends only the days it changed and checks for that flag
+ * first, because a partial upload to a replacing server would wipe the log.
+ *
+ * Two PUTs landing within the same few milliseconds can still race (Blobs
+ * 8.x has no conditional write); merging on every later write narrows that
+ * to a window nobody will hit by hand.
  */
 
 const KEY_RE = /^[a-f0-9]{64}$/;
@@ -31,7 +42,7 @@ export default async (req: Request, _context: Context) => {
 
   if (req.method === 'GET') {
     const doc = await store.get(key, { type: 'json' });
-    return json({ doc: doc ?? null });
+    return json({ doc: doc ?? null, merge: 1 });
   }
 
   if (req.method === 'PUT') {
@@ -46,8 +57,12 @@ export default async (req: Request, _context: Context) => {
       return json({ error: 'Not a tracker document.' }, 400);
     }
 
-    await store.setJSON(key, doc);
-    return json({ ok: true, savedAt: Date.now() });
+    const stored = await store.get(key, { type: 'json' });
+    const merged = mergeDocs(stored, doc);
+    const out = JSON.stringify(merged);
+    if (out.length > MAX_BYTES) return json({ error: 'Payload too large.' }, 413);
+    await store.setJSON(key, merged);
+    return json({ ok: true, savedAt: Date.now(), doc: merged, merge: 1 });
   }
 
   if (req.method === 'DELETE') {

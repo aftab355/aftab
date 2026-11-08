@@ -496,12 +496,17 @@ function parseWeightInput(raw) {
 }
 
 const WEIGHT_MIN_KG = 20, WEIGHT_MAX_KG = 350;
+/* 'manual' is typed in here and never overwritten by an import or the phone
+   app; 'samsung' and 'healthconnect' come from the phone and get refreshed. */
+const weightSourceLabel = src => src === 'samsung' ? 'Samsung Health' : src === 'healthconnect' ? 'Health Connect' : 'manual';
+const isManualWeight = w => !!w && (w.source === 'manual' || !w.source);
 const sensibleKg = kg => Number.isFinite(kg) && kg >= WEIGHT_MIN_KG && kg <= WEIGHT_MAX_KG;
 
 function setWeight(kg, source) {
   mutateDay(cursor, d => {
     if (Number.isFinite(kg)) d.weight = { kg: Math.round(kg * 100) / 100, source };
     else delete d.weight;
+    d.wu = Date.now();
   });
   render();
 }
@@ -550,7 +555,7 @@ function renderWeightCard() {
   input.placeholder = u === 'st' ? 'e.g. 13 4' : '—';
   $('#weightLabel').textContent = `Weight (${u === 'st' ? 'st lb' : u})`;
   if (document.activeElement !== input) input.value = w ? weightToInput(w.kg) : '';
-  $('#weightSource').textContent = !w ? 'not set' : (w.source === 'samsung' ? 'Samsung Health' : 'manual');
+  $('#weightSource').textContent = !w ? 'not set' : weightSourceLabel(w.source);
 
   const all = withTrend(allWeights());
   const before = all.filter(p => p.key < cursor).pop();
@@ -742,12 +747,13 @@ function renderWeightList(pts) {
     name.type = 'button';
     name.onclick = () => { goToDay(p.key); showView('today'); };
     main.append(name, el('span', 'entry-sub',
-      (p.source === 'samsung' ? 'Samsung Health' : 'manual') + (prev ? ` · ${fmtWeightDelta(p.kg - prev.kg)}` : '')));
+      weightSourceLabel(p.source) + (prev ? ` · ${fmtWeightDelta(p.kg - prev.kg)}` : '')));
     const del = el('button', 'mini del', '×');
     del.title = 'Delete'; del.setAttribute('aria-label', `Delete weigh-in for ${fmtLong(p.key)}`);
     del.onclick = () => {
-      if (!confirm(`Delete the ${fmtWeight(p.kg)} weigh-in on ${fmtLong(p.key)}?`)) return;
-      mutateDay(p.key, d => { delete d.weight; });
+      if (!confirm(`Delete the ${fmtWeight(p.kg)} weigh-in on ${fmtLong(p.key)}?` +
+        (isManualWeight(p) ? '' : '\n\nThe phone app won\'t send it again unless the reading changes in Samsung Health. A CSV import would.'))) return;
+      mutateDay(p.key, d => { delete d.weight; d.wu = Date.now(); });
       render();
       toast('Weigh-in deleted');
     };
@@ -1497,7 +1503,7 @@ function buildWeightPreview(parsed) {
   const rows = parsed.rows;
   // A weight typed in by hand is a deliberate correction; an import never
   // overrides it. Earlier Samsung imports are refreshed.
-  const manual = rows.filter(r => { const w = weightOf(r.date); return w && w.source !== 'samsung'; });
+  const manual = rows.filter(r => isManualWeight(weightOf(r.date)));
   const keep = new Set(manual.map(r => r.date));
   const usable = rows.filter(r => !keep.has(r.date));
 
@@ -1539,11 +1545,12 @@ function buildWeightPreview(parsed) {
       if (!sensibleKg(r.kg)) return;
       const day = state.days[r.date] || (state.days[r.date] = { entries: [], activity: null });
       const cur = day.weight;
-      if (cur && cur.source !== 'samsung') return;
+      if (isManualWeight(cur)) return;
       const kg = Math.round(r.kg * 100) / 100;
-      if (cur && cur.kg === kg) { n++; return; }   // unchanged: don't touch the day's timestamp
+      if (cur && cur.kg === kg) { n++; return; }   // unchanged (from either phone route): leave the day's timestamp alone
       day.weight = { kg, source: 'samsung' };
       day.u = now;
+      day.wu = now;
       n++;
     });
     save();
@@ -1711,13 +1718,24 @@ async function deriveKey(passphrase) {
 
 /* Per-day last-write-wins. Whole-document LWW would throw away a day logged
    on the phone the moment the laptop saved a different one. */
+/* Weight rides on its own clock (`wu`): the weigh-in usually comes from the
+   phone on the same day meals are logged here, and whole-day last-write-wins
+   would let either one erase the other. Same rule as the server's merge. */
+function mergeDay(a, b) {
+  const [win, lose] = (a.u || 0) >= (b.u || 0) ? [a, b] : [b, a];
+  if ((lose.wu || 0) <= (win.wu || 0)) return win;
+  const out = Object.assign({}, win, { wu: lose.wu });
+  if (lose.weight) out.weight = lose.weight; else delete out.weight;
+  return out;
+}
+
 function mergeStates(local, remote) {
   const days = {};
   for (const k of new Set([...Object.keys(local.days || {}), ...Object.keys(remote.days || {})])) {
     const l = local.days[k], r = remote.days[k];
     if (!l) days[k] = r;
     else if (!r) days[k] = l;
-    else days[k] = (l.u || 0) >= (r.u || 0) ? l : r;
+    else days[k] = mergeDay(l, r);
   }
   const localNewer = (local.settingsU || 0) >= (remote.settingsU || 0);
   return {
@@ -1769,6 +1787,18 @@ async function pushNow({ quiet } = {}) {
     });
     if (!res.ok) throw new Error(`Server said ${res.status}`);
     setDirty(false);
+    /* The server merges uploads and sends back the result, which may hold
+       days another device (or the phone app) added since this one pulled.
+       Only re-render if it does: a render resets input boxes mid-typing. */
+    const body = await res.json().catch(() => null);
+    const doc = body && body.doc;
+    if (doc && doc.days && typeof doc.days === 'object' &&
+        Object.keys(doc.days).some(k => !state.days[k] || (doc.days[k].u || 0) > (state.days[k].u || 0)
+          || (doc.days[k].wu || 0) > (state.days[k].wu || 0))) {
+      state = mergeStates(state, doc);
+      save();
+      render();
+    }
     if (!quiet) syncStatus('Saved to the server.', 'ok');
     renderSyncPanel();
     return true;
@@ -1858,11 +1888,20 @@ function restoreBackup(file) {
       }
       const days = Object.keys(parsed.days).length;
       if (!confirm(`Replace everything currently stored with this backup (${days} days)?`)) return;
+      /* The server keeps the newer copy of each day, so a restore re-dates
+         every restored day to now, and empties (tombstones) days the backup
+         doesn't have — otherwise sync would quietly bring them back. */
+      const now = Date.now();
+      const restored = {};
+      Object.keys(state.days).forEach(k => { restored[k] = { entries: [], activity: null, u: now }; });
+      Object.entries(parsed.days).forEach(([k, d]) => {
+        if (d && typeof d === 'object') restored[k] = Object.assign({ entries: [], activity: null }, d, { u: now });
+      });
       state = {
         version: 1,
         settings: cleanSettings(parsed.settings),
-        settingsU: Date.now(),
-        days: parsed.days
+        settingsU: now,
+        days: restored
       };
       save();
       queuePush();
