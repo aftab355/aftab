@@ -28,3 +28,11 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "no-referrer"
     X-Frame-Options = "SAMEORIGIN"
+
+## The Android weight-sync app. Served with its proper type so phones offer
+## to install it, and never cached so a rebuilt APK is picked up at once.
+[[headers]]
+  for = "/android/*.apk"
+  [headers.values]
+    Content-Type = "application/vnd.android.package-archive"
+    Cache-Control = "no-cache"

@@ -1,0 +1,33 @@
+<resources>
+    <string name="app_name">Weight Sync</string>
+    <string name="title">Weight sync</string>
+    <string name="intro">Sends your weigh-ins from Samsung Health (through Health Connect) to your calorie tracker, every few hours and whenever you open this app.</string>
+    <string name="tracker">1 · Your tracker</string>
+    <string name="site_hint">Site address, e.g. my-calories.netlify.app</string>
+    <string name="pass_hint">Sync passphrase (same as the website)</string>
+    <string name="connect">Connect</string>
+    <string name="connecting">Checking…</string>
+    <string name="connected_to">Connected to %1$s</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="err_site">Enter the site address, starting https:// (or just the domain).</string>
+    <string name="err_pass">The passphrase is at least 8 characters, same as on the website.</string>
+    <string name="health">2 · Health Connect</string>
+    <string name="health_needed">Not allowed yet. Also check Samsung Health → Settings → Health Connect is sharing Weight.</string>
+    <string name="health_ok_bg">Weight access allowed, including in the background.</string>
+    <string name="health_ok_fg">Weight access allowed. Background access isn\'t, so it syncs when you open this app.</string>
+    <string name="health_update">Health Connect needs installing or updating.</string>
+    <string name="health_unavailable">Health Connect isn\'t available on this phone (it needs Android 9 or newer).</string>
+    <string name="health_allow">Allow Health Connect access</string>
+    <string name="health_manage">Review access in Health Connect</string>
+    <string name="health_install">Get Health Connect</string>
+    <string name="sync">3 · Sync</string>
+    <string name="sync_not_connected">Connect to your tracker first.</string>
+    <string name="sync_never">Not synced yet.</string>
+    <string name="syncing">Syncing…</string>
+    <string name="sync_now">Sync now</string>
+    <string name="footnote">A weight you type on the website always wins. Deleting a weigh-in on the website sticks unless the reading changes in Samsung Health.</string>
+    <string name="privacy">Privacy</string>
+    <string name="privacy_title">What this app does with your data</string>
+    <string name="privacy_body">Weight Sync reads one thing from Health Connect: your weight readings. Nothing else.\n\nIt sends the latest reading for each day, with the date and whether it came from Samsung Health, to the calorie tracker website you connect it to. That is the only place it sends anything. There are no ads, analytics or third parties.\n\nIt identifies itself to your website with a key derived from your sync passphrase on this phone. The passphrase itself is never stored or sent.\n\nTo stop, tap Disconnect or remove access in Health Connect. Data already sent stays in your tracker until you delete it there.</string>
+    <string name="close">Close</string>
+</resources>

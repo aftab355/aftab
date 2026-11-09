@@ -53,6 +53,35 @@ Week and Month; eaten, activity and allowance totals cover only days with
 food logged, and the cards say how many that was. Logging food on an
 imported day replaces its recorded net, and Today has a button to remove it.
 
+## Weight
+
+Type a weigh-in into the **Weight** box on Today (any day), or import your
+Samsung Health weight history (below). Units are kg, lb, or stone and pounds
+(Settings); in stone, type `13 4` for 13 st 4 lb. Weights are always stored
+in kg, so switching unit never changes the data. A weigh-in does not make a
+day count as logged: calorie totals ignore it.
+
+The **Weight** tab shows, for 30 days / 90 days / 1 year / all:
+
+- **Latest** reading and the **trend**: a moving average (10% per day,
+  gap-aware). Daily readings swing a kilo or more on water alone; the trend
+  is the number to watch.
+- **Change** and **rate per week** from a straight line fitted through the
+  readings, which doesn't lag the way the moving average does. Needs at least
+  three weigh-ins across a week.
+- A chart of every weigh-in (dots) with the trend line.
+- **Calories vs scale**: what your logged net predicted (at 7700 kcal/kg)
+  against what the fitted line shows. A weigh-in on day D reflects eating up
+  to the end of D−1, so the net counted runs from the first weigh-in's day to
+  the day before the last one. Unlogged days are assumed to average the same
+  as logged ones, and that assumption is the weak point: if they were your
+  takeaway days, the prediction is too optimistic. It gives a verdict only
+  when it has 21+ days, 80%+ of them logged and 8+ weigh-ins; otherwise it
+  says why not. A persistent gap usually means food is under-logged, activity
+  is overcounted, or maintenance is set wrong. It's a rough calibration, not
+  a measurement.
+- The weigh-ins, newest first; tap one to open that day, × to delete.
+
 ## Samsung Health
 
 **Samsung Health has no public web API.** The current Samsung Health Data SDK is
@@ -68,7 +97,22 @@ The supported route is the data export:
 3. In this app: **Settings → Samsung Health import**, drop in a CSV
 
 Files that work: `com.samsung.shealth.calories_burned.details.*.csv` (best),
-`com.samsung.health.step_daily_trend.*.csv`, `com.samsung.shealth.exercise.*.csv`.
+`com.samsung.health.step_daily_trend.*.csv`, `com.samsung.shealth.exercise.*.csv`
+for activity, and `com.samsung.health.weight.*.csv` for weight. The same drop
+zone takes all of them and works out which kind it was given.
+
+For weight there is also an automatic route: the Android app below. Without
+it, export again and drop the new weight file in to bring in newer weigh-ins. Re-importing is safe: days already imported are
+refreshed, a weight you typed in by hand is never overwritten, and unchanged
+days are left untouched so they don't win a sync conflict against another
+device. The import pulls from the sync server first, for the same reason.
+
+Weight specifics: Samsung stores kg whatever unit its app shows. Timestamps are
+UTC with the local offset in a `time_offset` column; the offset is applied
+before picking the day, so a 00:30 weigh-in isn't filed under the previous
+date. Several readings on one day (scale plus phone, or a re-weigh) collapse
+to the latest. Readings outside 20–350 kg, or dated in the future, are
+skipped and counted in the preview.
 
 The parser sniffs rather than assumes, because Samsung moves columns between
 app versions. It skips the metadata line those exports start with, matches the
@@ -82,6 +126,37 @@ watch each write their own row and summing them double-counts. Exercise files
 preview before anything is saved, so a wrong guess costs you nothing.
 
 You can also just type the number into the Activity field on any day.
+
+## Automatic weight from the phone (Android app)
+
+`android/` is a small Android app, **Weight Sync**, that reads weigh-ins from
+Health Connect and posts them to this site's `/api/sync`. Samsung Health
+writes weight into Health Connect when its sharing is on (Samsung Health →
+Settings → Health Connect). The built, signed APK is
+`android/calorie-weight-sync.apk`, linked from Settings on the site, so you
+install it straight from your phone's browser.
+
+- **Connect.** Enter the site address and the sync passphrase. The app
+  derives the same key the website does (PBKDF2, same salt and rounds, unit
+  tested against the browser's output) and keeps only the key. It refuses to
+  connect unless the server already holds a log under that key, so a mistyped
+  passphrase can't start a separate, empty log. It also refuses unless the
+  server reports `merge: 1` (see Storage): the app uploads only the days it
+  changed, and the old replace-on-write server would have taken that as the
+  whole log.
+- **Schedule.** Every 3 hours via WorkManager, and every time the app is
+  opened. Background runs need Health Connect's "access data in the
+  background" permission; without it the app syncs when opened. The first
+  sync reads back a year (more than 30 days before the grant needs the
+  "past data" permission), and later syncs read 45 days.
+- **Rules.** It takes one reading per local day (the latest, from the
+  record's own UTC offset). It never overwrites a weight typed on the website,
+  and it keeps a ledger of what it sent, so deleting a weigh-in on the website
+  sticks until that reading changes in Health Connect.
+- **Reads only weight.** Nothing else is requested from Health Connect, and
+  nothing goes anywhere but your site.
+
+Build instructions are in `android/README.md`.
 
 ## Storage
 
@@ -102,9 +177,21 @@ Consequences worth being clear about:
 - The derived key *is* the credential. A weak passphrase is guessable by anyone
   who finds the endpoint, which is why 8 characters is the enforced floor and
   more is better.
-- Merging is **per-day last-write-wins**. Two devices editing *different* days
-  both keep their work; two devices editing *the same* day means the later
-  write wins that day. Deletions use tombstones so they do not resurrect.
+- Merging is **per-day last-write-wins**, on the device *and on the server*:
+  an upload is merged into what is stored, not written over it, and the
+  merged result comes back so the uploader picks up other devices' changes.
+  Two devices editing *different* days both keep their work; two devices
+  editing *the same* day means the later write wins that day. Deletions use
+  tombstones so they do not resurrect. Restoring a backup re-dates the
+  restored days and empties the others, so a restore still replaces
+  everything.
+- **Weight has its own clock** (`wu`) and is merged separately from the
+  day's food. The usual collision is a phone weigh-in in the morning and a
+  meal logged on the laptop that afternoon, and with whole-day merging
+  whichever came last would erase the other.
+- Two uploads landing within the same few milliseconds can still race on the
+  server (Netlify Blobs 8 has no conditional write). Merging on every later
+  upload makes that a window nobody hits by hand.
 - A failed upload is remembered across reloads and retried when you come back
   online, so an entry logged with no signal is not silently lost.
 

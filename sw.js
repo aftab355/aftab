@@ -1,5 +1,5 @@
 /* Offline shell. Bump CACHE on every deploy so clients pick up new files. */
-const CACHE = 'calorie-tracker-v8';
+const CACHE = 'calorie-tracker-v10';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {
@@ -22,6 +22,8 @@ self.addEventListener('fetch', e => {
   // Never cache sync traffic — a replayed stale document has no business
   // being merged back in.
   if (url.pathname.startsWith('/api/')) return;
+  // The Android app download is large and only fetched once; keep it out of the offline cache.
+  if (url.pathname.endsWith('.apk')) return;
   e.respondWith(
     fetch(e.request)
       .then(res => {

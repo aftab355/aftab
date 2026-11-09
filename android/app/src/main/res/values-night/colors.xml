@@ -1,0 +1,8 @@
+<resources>
+    <color name="bg">#0F1115</color>
+    <color name="surface">#171A20</color>
+    <color name="ink">#E9EDF3</color>
+    <color name="ink2">#A3ADBB</color>
+    <color name="accent">#5B8DFF</color>
+    <color name="bad">#FF7A63</color>
+</resources>

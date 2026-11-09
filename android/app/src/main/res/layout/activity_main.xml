@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="28dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/title"
+            android:textColor="@color/ink"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <TextView
+            style="@style/Body"
+            android:layout_marginTop="6dp"
+            android:text="@string/intro"
+            android:textColor="@color/ink2" />
+
+        <!-- 1. Tracker -->
+        <LinearLayout style="@style/Card">
+            <TextView style="@style/CardTitle" android:text="@string/tracker" />
+
+            <LinearLayout
+                android:id="@+id/connectForm"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <EditText
+                    android:id="@+id/site"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:autofillHints="url"
+                    android:hint="@string/site_hint"
+                    android:imeOptions="actionNext"
+                    android:inputType="textUri"
+                    android:minHeight="48dp" />
+                <EditText
+                    android:id="@+id/passphrase"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:autofillHints="password"
+                    android:hint="@string/pass_hint"
+                    android:imeOptions="actionDone"
+                    android:inputType="textPassword"
+                    android:minHeight="48dp" />
+                <Button
+                    android:id="@+id/connect"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/connect" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/connectedBox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+                <TextView android:id="@+id/connectedText" style="@style/Body" />
+                <Button
+                    android:id="@+id/disconnect"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/disconnect" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/connectMsg"
+                style="@style/Body"
+                android:layout_marginTop="6dp"
+                android:textColor="@color/bad"
+                android:textSize="14sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- 2. Health Connect -->
+        <LinearLayout style="@style/Card">
+            <TextView style="@style/CardTitle" android:text="@string/health" />
+            <TextView android:id="@+id/healthText" style="@style/Body" />
+            <Button
+                android:id="@+id/healthBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/health_allow" />
+        </LinearLayout>
+
+        <!-- 3. Sync -->
+        <LinearLayout style="@style/Card">
+            <TextView style="@style/CardTitle" android:text="@string/sync" />
+            <TextView android:id="@+id/syncText" style="@style/Body" android:textColor="@color/ink2" />
+            <Button
+                android:id="@+id/syncBtn"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/sync_now" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/Body"
+            android:layout_marginTop="16dp"
+            android:text="@string/footnote"
+            android:textColor="@color/ink2"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/privacyBtn"
+            style="?android:attr/borderlessButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/privacy" />
+    </LinearLayout>
+</ScrollView>

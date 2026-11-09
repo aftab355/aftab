@@ -314,3 +314,41 @@ textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .recnote[hidden]{display:none}
 .ring-arc.imported{opacity:.45}
 .col-val.pos,.col-val.neg{font-size:10px}
+
+/* ---------- weight ---------- */
+#wtBody{display:flex;flex-direction:column;gap:var(--gap)}
+#wtBody[hidden],#wtEmptyState[hidden]{display:none}
+.seg-card{padding:6px}
+.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+.seg button{
+  appearance:none;border:0;background:transparent;color:var(--ink-2);
+  font:inherit;font-size:13px;font-weight:600;padding:8px 4px;border-radius:9px;cursor:pointer;
+}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.wtchart{width:100%;min-height:190px}
+.wtsvg{display:block;max-width:100%;height:auto}
+.wt-grid{stroke:var(--line-soft);stroke-width:1}
+.wt-axis{fill:var(--ink-3);font-size:10.5px;font-variant-numeric:tabular-nums}
+.wt-dot{fill:var(--ink-3);opacity:.55}
+.wt-line{fill:none;stroke:var(--accent);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+.sw-dot{background:var(--ink-3)!important;opacity:.6;border-radius:50%!important;width:7px!important;height:7px!important}
+.sw-line{background:var(--accent)!important;height:3px!important;width:12px!important;border-radius:2px}
+.cmp{display:flex;flex-direction:column;gap:10px}
+.cmp-row{display:grid;grid-template-columns:96px 1fr;column-gap:10px;align-items:baseline}
+.cmp-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);font-weight:620}
+.cmp-row strong{font-size:18px;font-weight:680;font-variant-numeric:tabular-nums}
+.cmp-sub{grid-column:2;font-size:12px;color:var(--ink-3)}
+.cmp-verdict{margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line-soft)}
+.linkbtn{appearance:none;border:0;background:none;padding:0;color:inherit;font:inherit;font-weight:560;cursor:pointer;text-align:left;max-width:100%}
+.linkbtn:hover{text-decoration:underline}
+#wtList .entry-sub{display:block}
+
+/* Five tabs on a phone: tighten so "Settings" still fits at 320px. */
+@media (max-width:400px){
+  .tabs{gap:2px}
+  .tab{font-size:13px;padding:7px 2px}
+}
+.steps{margin:0 0 12px;padding-left:20px;font-size:13px;color:var(--ink-2);line-height:1.55}
+.steps li{margin-bottom:4px}
+.steps b{color:var(--ink)}
+a.btn{text-decoration:none;display:inline-block}
