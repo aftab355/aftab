@@ -111,6 +111,12 @@ object SyncCore {
         }
     }
 
+    private val KEY_RE = Regex("^[a-f0-9]{64}$")
+    fun validKey(k: String?): Boolean = k != null && KEY_RE.matches(k)
+
+    /** The short ID the website shows under Sync across devices. */
+    fun keyId(key: String): String = key.take(6)
+
     /* "mysite.netlify.app/" -> "https://mysite.netlify.app". Plain http is
      * refused: the sync key would cross the network in the clear. */
     fun normaliseSite(raw: String): String? {

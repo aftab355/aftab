@@ -1850,11 +1850,28 @@ function disableSync() {
   syncStatus('Sync off. Your data stays in this browser; the server copy is untouched.', 'ok');
 }
 
+/* One tap hands the phone app this device's sync key, so the passphrase is
+   never retyped (a stray capital or space derives a different key, and the
+   app then finds no log). An intent: link with the app's package named goes
+   to that app only; if it isn't installed, the browser opens the APK
+   download instead. The key never leaves the phone: the browser resolves
+   the link locally. */
+const ANDROID_PACKAGE = 'io.github.aftab355.weightsync';
+function phoneLinkHref() {
+  const apk = new URL('android/calorie-weight-sync.apk', location.href).href;
+  return `intent://connect?site=${encodeURIComponent(location.origin)}&key=${syncKey}` +
+    `#Intent;scheme=weightsync;package=${ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(apk)};end`;
+}
+
 function renderSyncPanel() {
   const on = !!syncKey;
   $('#syncOff').hidden = on;
   $('#syncOn').hidden = !on;
   $('#syncBadge').textContent = on ? 'on' : 'off';
+  $('#syncKeyId').textContent = on ? syncKey.slice(0, 6) : '';
+  $('#phoneLink').hidden = !on;
+  $('#phoneLinkOff').hidden = on;
+  if (on) $('#phoneLink').href = phoneLinkHref();
 }
 
 /* ─────────────────────────  settings & backup  ───────────────────────── */

@@ -328,9 +328,14 @@
       <ol class="steps">
         <li>On the phone: <b>Samsung Health &rarr; Settings &rarr; Health Connect</b>, and allow it to share <b>Weight</b>.</li>
         <li>Download and install the app below. Android will ask you to allow installs from your browser, because it isn&rsquo;t from the Play Store.</li>
-        <li>Open it, enter this site&rsquo;s address and your sync passphrase, then tap <b>Allow Health Connect access</b>.</li>
+        <li>Come back here and tap <b>Connect the app on this phone</b>. It hands the app your sync key directly,
+          so there&rsquo;s no passphrase to retype. Then tap <b>Allow Health Connect access</b> in the app.</li>
       </ol>
-      <div class="btnrow"><a class="btn primary" href="android/calorie-weight-sync.apk" download>Download the Android app</a></div>
+      <div class="btnrow">
+        <a class="btn primary" href="android/calorie-weight-sync.apk" download>Download the Android app</a>
+        <a class="btn primary" id="phoneLink" href="#" hidden>Connect the app on this phone</a>
+      </div>
+      <p class="explain" id="phoneLinkOff" style="margin:10px 0 0">Turn on <b>Sync across devices</b> below to get the connect button.</p>
       <p class="explain" style="margin:10px 0 0">A weight you type in here always wins over the phone. Deleting a phone
         weigh-in here sticks unless the reading changes in Samsung Health.</p>
     </div>
@@ -362,6 +367,8 @@
       <div id="syncOn" hidden>
         <p class="explain">Sync is on. Changes upload a moment after you make them, and this device pulls
           anything new whenever you return to the tab.</p>
+        <p class="explain">Key ID <b id="syncKeyId"></b> &mdash; every device and the phone app using the same
+          passphrase shows the same ID. A different ID means a different passphrase.</p>
         <div class="btnrow">
           <button class="btn" id="syncNowBtn">Sync now</button>
           <button class="btn" id="syncOffBtn">Turn off on this device</button>

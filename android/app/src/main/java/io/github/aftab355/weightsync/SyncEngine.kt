@@ -55,8 +55,9 @@ class SyncEngine(private val ctx: Context) {
             "That site is running an older version of the tracker. Deploy the latest version first — " +
             "the old one would let this app overwrite your log.")
         return body.optJSONObject("doc") ?: throw SyncException(
-            "No synced log found for that passphrase. Turn on \"Sync across devices\" in the website's " +
-            "Settings first, with exactly the same passphrase.")
+            "No synced log found for that passphrase (key ID ${SyncCore.keyId(key)}). The website shows its " +
+            "key ID under Settings → Sync across devices; if they differ, the passphrases differ. Easiest fix: " +
+            "on the website tap \"Connect the app on this phone\" — no typing needed.")
     }
 
     /** Runs one sync and returns a one-line summary. Throws SyncException with a readable message. */
@@ -96,6 +97,12 @@ class SyncEngine(private val ctx: Context) {
                 append(". Latest: ${SyncCore.formatWeight(latest.value.kg, store.unit)} on $d")
             } else append(". No weigh-ins found in Health Connect")
             if (result.keptManual > 0) append(". ${result.keptManual} day${if (result.keptManual == 1) "" else "s"} kept as typed on the website")
+            // Say how far back Health Connect actually goes, so missing history
+            // is visibly a Health Connect/Samsung limit, not a silent failure.
+            readings.keys.minOrNull()?.let { oldest ->
+                val d = LocalDate.parse(oldest).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
+                append(". Health Connect has ${readings.size} day${if (readings.size == 1) "" else "s"} of weigh-ins, back to $d")
+            }
             append('.')
         }
     }

@@ -55,6 +55,15 @@ class SyncCoreTest {
         assertEquals(1, changedReading.changedDays.length())
     }
 
+    @Test fun linkKeys() {
+        val k = "49a38c8b2ca91b62d917066adab830befe46ee84ac18990dedf16cdb255d2fd8"
+        assertTrue(SyncCore.validKey(k))
+        assertEquals("49a38c", SyncCore.keyId(k))
+        assertFalse(SyncCore.validKey(k.uppercase()))
+        assertFalse(SyncCore.validKey(k.dropLast(1)))
+        assertFalse(SyncCore.validKey(null))
+    }
+
     @Test fun formatting() {
         assertEquals("84.3 kg", SyncCore.formatWeight(84.3, "kg"))
         assertEquals("13 st 4 lb", SyncCore.formatWeight(186 / 2.2046226218, "st"))

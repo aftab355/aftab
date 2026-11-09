@@ -1,5 +1,5 @@
 /* Offline shell. Bump CACHE on every deploy so clients pick up new files. */
-const CACHE = 'calorie-tracker-v10';
+const CACHE = 'calorie-tracker-v11';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {

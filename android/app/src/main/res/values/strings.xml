@@ -7,7 +7,8 @@
     <string name="pass_hint">Sync passphrase (same as the website)</string>
     <string name="connect">Connect</string>
     <string name="connecting">Checking…</string>
-    <string name="connected_to">Connected to %1$s</string>
+    <string name="connected_to">Connected to %1$s\nKey ID %2$s</string>
+    <string name="err_link">That connect link was incomplete. Tap the button on the website again.</string>
     <string name="disconnect">Disconnect</string>
     <string name="err_site">Enter the site address, starting https:// (or just the domain).</string>
     <string name="err_pass">The passphrase is at least 8 characters, same as on the website.</string>
@@ -15,6 +16,8 @@
     <string name="health_needed">Not allowed yet. Also check Samsung Health → Settings → Health Connect is sharing Weight.</string>
     <string name="health_ok_bg">Weight access allowed, including in the background.</string>
     <string name="health_ok_fg">Weight access allowed. Background access isn\'t, so it syncs when you open this app.</string>
+    <string name="health_hist_ok">Past data: allowed.</string>
+    <string name="health_hist_no">Past data: not allowed, so only the 30 days before you granted access can be read. Turn on \"Access past data\" in Health Connect for older weigh-ins.</string>
     <string name="health_update">Health Connect needs installing or updating.</string>
     <string name="health_unavailable">Health Connect isn\'t available on this phone (it needs Android 9 or newer).</string>
     <string name="health_allow">Allow Health Connect access</string>
