@@ -61,14 +61,16 @@ Samsung Health weight history (below). Units are kg, lb, or stone and pounds
 in kg, so switching unit never changes the data. A weigh-in does not make a
 day count as logged: calorie totals ignore it.
 
-The **Weight** tab shows, for 30 days / 90 days / 1 year / all:
+The **Weight** tab shows, for 1 week / 30 days / 90 days / 1 year:
 
 - **Latest** reading and the **trend**: a moving average (10% per day,
   gap-aware). Daily readings swing a kilo or more on water alone; the trend
   is the number to watch.
 - **Change** and **rate per week** from a straight line fitted through the
   readings, which doesn't lag the way the moving average does. Needs at least
-  three weigh-ins across a week.
+  three weigh-ins across a week (the 1-week view settles for four weigh-ins
+  across four days, and labels its rate as rough: a week of readings is
+  mostly water).
 - A chart of every weigh-in (dots) with the trend line.
 - **Calories vs scale**: what your logged net predicted (at 7700 kcal/kg)
   against what the fitted line shows. A weigh-in on day D reflects eating up

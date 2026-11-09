@@ -574,8 +574,9 @@ function renderWeightCard() {
 }
 
 /* ─────────────────────────  weight view  ───────────────────────── */
-let weightRange = '90';
-try { const r = localStorage.getItem('calorie-tracker/weight-range'); if (['30', '90', '365', 'all'].includes(r)) weightRange = r; }
+const WEIGHT_RANGES = ['7', '30', '90', '365'];
+let weightRange = '30';
+try { const r = localStorage.getItem('calorie-tracker/weight-range'); if (WEIGHT_RANGES.includes(r)) weightRange = r; }
 catch { /* storage blocked */ }
 
 function renderWeight() {
@@ -588,7 +589,7 @@ function renderWeight() {
   if (!all.length) return;
 
   const t = todayKey();
-  const start = weightRange === 'all' ? all[0].key : addDays(t, -(Number(weightRange) - 1));
+  const start = addDays(t, -(Number(weightRange) - 1));
   const pts = all.filter(p => p.key >= start);
   const last = all[all.length - 1];
 
@@ -598,7 +599,11 @@ function renderWeight() {
   $('#wtTrendSub').textContent = all.length > 2 ? 'smoothed · ' + (wUnit() === 'st' ? 'st lb' : wUnit()) : 'needs 3+ weigh-ins';
 
   const fit = fitLine(pts);
-  const enough = fit && fit.span >= 7 && pts.length >= 3;
+  /* A week-long window can't hold a 7-day spread (first to last is at most
+     6 days), so the week view settles for 4 days and 4 weigh-ins. Water
+     swings make a single week's rate rough; the sub-label says so. */
+  const short = weightRange === '7';
+  const enough = fit && fit.span >= (short ? 4 : 7) && pts.length >= (short ? 4 : 3);
   const change = enough ? fit.at(fit.span) - fit.at(0) : NaN;
   const rate = enough ? fit.slope * 7 : NaN;
   const setCard = (id, v) => {
@@ -608,9 +613,10 @@ function renderWeight() {
   setCard('#wtChangeCard', change);
   setCard('#wtRateCard', rate);
   $('#wtChange').textContent = enough ? fmtWeightDelta(change) : '—';
-  $('#wtChangeSub').textContent = enough ? `over ${fit.span} days` : 'needs a week of weigh-ins';
+  $('#wtChangeSub').textContent = enough ? `over ${fit.span} days`
+    : short ? 'needs 4+ weigh-ins over 4+ days' : 'needs a week of weigh-ins';
   $('#wtRate').textContent = enough ? fmtWeightDelta(rate) : '—';
-  $('#wtRateSub').textContent = enough ? 'per week' + (weightRange === 'all' ? ' (average)' : '') : 'per week';
+  $('#wtRateSub').textContent = enough && short ? 'per week · rough, water swings' : 'per week';
 
   renderWeightChart(pts, start, t);
   renderWeightCompare(pts, fit, enough);
