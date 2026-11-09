@@ -64,6 +64,26 @@ class MainActivity : ComponentActivity() {
         healthBtn.setOnClickListener { requestHealth() }
         syncBtn.setOnClickListener { syncNow() }
         findViewById<Button>(R.id.privacyBtn).setOnClickListener { startActivity(Intent(this, PrivacyActivity::class.java)) }
+
+        if (savedInstanceState == null) handleLink(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleLink(intent)
+    }
+
+    /* weightsync://connect?site=…&key=… from the website's connect button.
+     * The key arrives already derived, so nothing is typed. It replaces any
+     * existing connection: tapping the button is an explicit choice. */
+    private fun handleLink(intent: Intent?) {
+        val uri = intent?.data ?: return
+        if (uri.scheme != "weightsync" || uri.host != "connect") return
+        setIntent(Intent(this, MainActivity::class.java))   // don't re-handle on recreate
+        val site = SyncCore.normaliseSite(uri.getQueryParameter("site") ?: "")
+        val key = uri.getQueryParameter("key")
+        if (site == null || !SyncCore.validKey(key)) return say(getString(R.string.err_link))
+        connectWith(site, key!!)
     }
 
     override fun onResume() {
@@ -83,7 +103,7 @@ class MainActivity : ComponentActivity() {
         val connected = store.connected
         connectForm.visibility = if (connected) View.GONE else View.VISIBLE
         connectedBox.visibility = if (connected) View.VISIBLE else View.GONE
-        if (connected) connectedText.text = getString(R.string.connected_to, store.site)
+        if (connected) connectedText.text = getString(R.string.connected_to, store.site, SyncCore.keyId(store.key ?: ""))
 
         lifecycleScope.launch {
             when (HealthConnectClient.getSdkStatus(this@MainActivity)) {
@@ -91,8 +111,10 @@ class MainActivity : ComponentActivity() {
                     val client = HealthConnectClient.getOrCreate(this@MainActivity)
                     val granted = client.permissionController.getGrantedPermissions()
                     val bg = androidx.health.connect.client.permission.HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND in granted
+                    val hist = androidx.health.connect.client.permission.HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in granted
                     if (Health.READ_WEIGHT in granted) {
-                        healthText.text = getString(if (bg) R.string.health_ok_bg else R.string.health_ok_fg)
+                        healthText.text = getString(if (bg) R.string.health_ok_bg else R.string.health_ok_fg) + "\n" +
+                            getString(if (hist) R.string.health_hist_ok else R.string.health_hist_no)
                         healthBtn.text = getString(R.string.health_manage)
                     } else {
                         healthText.text = getString(R.string.health_needed)
@@ -135,9 +157,19 @@ class MainActivity : ComponentActivity() {
         connectBtn.isEnabled = false
         say(getString(R.string.connecting))
         lifecycleScope.launch {
+            val key = withContext(Dispatchers.Default) { SyncCore.deriveKey(pass) }
+            connectWith(site, key)
+        }
+    }
+
+    private fun connectWith(site: String, key: String) {
+        connectBtn.isEnabled = false
+        say(getString(R.string.connecting))
+        lifecycleScope.launch {
             try {
-                val key = withContext(Dispatchers.Default) { SyncCore.deriveKey(pass) }
                 engine.verify(site, key)
+                // A different log hasn't seen anything this app sent before.
+                if (store.key != key || store.site != site) store.saveLedger(emptyMap(), "")
                 store.site = site; store.key = key
                 store.historyDone = false
                 passInput.setText("")
