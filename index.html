@@ -73,6 +73,11 @@
     <div class="card">
       <div class="card-head">
         <h2>Activity</h2>
+        <div class="lift-seg" id="liftSeg" role="group" aria-label="Lifting today">
+          <button type="button" data-lift="" aria-pressed="true">None</button>
+          <button type="button" data-lift="legs" aria-pressed="false" title="Leg day: +250 kcal activity">Legs</button>
+          <button type="button" data-lift="upper" aria-pressed="false" title="Upper body: +175 kcal activity">Upper</button>
+        </div>
         <span class="pill" id="activitySource">not set</span>
       </div>
       <div class="field-row">
@@ -224,13 +229,13 @@
     <div id="wtBody">
       <div class="stats">
         <div class="card stat"><span class="stat-label">Latest</span><strong class="stat-val" id="wtLatest">&mdash;</strong><span class="stat-sub" id="wtLatestSub"></span></div>
-        <div class="card stat"><span class="stat-label">Trend</span><strong class="stat-val" id="wtTrend">&mdash;</strong><span class="stat-sub" id="wtTrendSub">smoothed</span></div>
+        <div class="card stat"><span class="stat-label">Deficits say</span><strong class="stat-val" id="wtExpected">&mdash;</strong><span class="stat-sub" id="wtExpectedSub"></span></div>
         <div class="card stat" id="wtChangeCard"><span class="stat-label">Change</span><strong class="stat-val" id="wtChange">&mdash;</strong><span class="stat-sub" id="wtChangeSub"></span></div>
         <div class="card stat" id="wtRateCard"><span class="stat-label">Rate</span><strong class="stat-val" id="wtRate">&mdash;</strong><span class="stat-sub" id="wtRateSub">per week</span></div>
       </div>
 
       <div class="card">
-        <div class="card-head"><h2>Trend</h2><span class="pill legend"><i class="sw-dot"></i>weigh-in <i class="sw-line"></i>trend</span></div>
+        <div class="card-head"><h2>Scale vs deficits</h2><span class="pill legend"><i class="sw-line"></i>scale <i class="sw-exp"></i>deficits say</span></div>
         <div id="wtChart" class="wtchart"></div>
       </div>
 
@@ -277,6 +282,14 @@
           <option value="1">Monday</option>
           <option value="0">Sunday</option>
         </select>
+      </label>
+      <label class="field">
+        <span id="setStartKgLabel">Starting weight (kg)</span>
+        <input type="text" id="setStartKg" inputmode="decimal">
+      </label>
+      <label class="field">
+        <span>Starting date (the weight chart's &ldquo;deficits say&rdquo; line begins here)</span>
+        <input type="date" id="setStartDate">
       </label>
       <p class="formula">You aim to eat the target every day; activity never changes it.<br>
         Net = eaten &minus; (maintenance + share &times; activity)</p>

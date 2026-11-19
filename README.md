@@ -19,6 +19,12 @@ Activity never changes it. The day's net deficit, including activity, is
 shown in smaller type under the calories remaining, as context rather than
 a number to eat back.
 
+The Activity card has a **None / Legs / Upper** toggle for lifting days
+(none by default). Leg day adds 250 kcal and upper body 175 kcal to that day's
+activity, on top of the number in the box, so it gets the same 0.75 share as
+the rest of activity. It is stored separately (`day.lift`), so a Samsung
+import refreshing the box doesn't clear it.
+
 The **Week** view tracks the same net. Only three quarters of activity
 counts, to allow for wearables overestimating burn; the share is editable in
 Settings. The dashed line on the chart is each day's allowance, so a bar
@@ -63,15 +69,18 @@ day count as logged: calorie totals ignore it.
 
 The **Weight** tab shows, for 1 week / 30 days / 90 days / 1 year:
 
-- **Latest** reading and the **trend**: a moving average (10% per day,
-  gap-aware). Daily readings swing a kilo or more on water alone; the trend
-  is the number to watch.
+- **Latest** reading and **Deficits say**: the weight your logged deficits
+  predict by the latest weigh-in, starting from the starting weight and date
+  in Settings (113 kg on 26 Oct 2026 by default) at 7700 kcal/kg. The value
+  for a morning counts the nets of the days before it. Unlogged days count
+  as zero, so gaps make it read high rather than low.
 - **Change** and **rate per week** from a straight line fitted through the
-  readings, which doesn't lag the way the moving average does. Needs at least
+  readings. Needs at least
   three weigh-ins across a week (the 1-week view settles for four weigh-ins
   across four days, and labels its rate as rough: a week of readings is
   mostly water).
-- A chart of every weigh-in (dots) with the trend line.
+- A chart of the scale readings (solid line) against the deficits-say line
+  (dashed), so you can see where the two drift apart.
 - **Calories vs scale**: what your logged net predicted (at 7700 kcal/kg)
   against what the fitted line shows. A weigh-in on day D reflects eating up
   to the end of D−1, so the net counted runs from the first weigh-in's day to
