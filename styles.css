@@ -56,6 +56,9 @@ body{
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
 .card-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .card-head h2{font-size:13px;margin:0;font-weight:620;letter-spacing:.02em;text-transform:uppercase;color:var(--ink-2)}
+.lift-seg{display:flex;gap:2px;padding:2px;background:var(--bg);border:1px solid var(--line);border-radius:999px}
+.lift-seg button{appearance:none;border:0;background:transparent;color:var(--ink-2);font:inherit;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;cursor:pointer}
+.lift-seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 .pill{margin-left:auto;font-size:12px;font-weight:600;color:var(--ink-2);background:var(--bg);border:1px solid var(--line);padding:3px 9px;border-radius:999px;white-space:nowrap}
 
 /* ---------- day nav ---------- */

@@ -98,7 +98,7 @@ function pruneTombstones() {
   const cutoff = addDays(todayKey(), -90);
   for (const k of Object.keys(state.days)) {
     const d = state.days[k];
-    if (k < cutoff && !d.entries.length && !d.activity && !d.recorded && !d.weight) delete state.days[k];
+    if (k < cutoff && !d.entries.length && !d.activity && !d.lift && !d.recorded && !d.weight) delete state.days[k];
   }
 }
 
@@ -135,9 +135,18 @@ function mutateDay(k, fn) {
    secondary information on Today and as the headline of the Week view — it
    never feeds back into the target. Only part of activity counts because
    wearables overestimate burn and maintenance already covers some movement. */
+/* A lifting session is toggled per day (none is the default) and adds a
+   fixed burn on top of whatever the activity box holds, so a Samsung import
+   refreshing the box never wipes it. */
+const LIFT_KCAL = { legs: 250, upper: 175 };
+const LIFT_LABEL = { legs: 'leg day', upper: 'upper body' };
+const liftOf = k => LIFT_KCAL[dayOf(k).lift] ? dayOf(k).lift : null;
+const liftCalsOf = k => LIFT_KCAL[liftOf(k)] || 0;
+
 function activeCalsOf(k) {
   const a = dayOf(k).activity;
-  return a && Number.isFinite(a.calories) ? Math.max(0, a.calories) : 0;
+  const tracked = a && Number.isFinite(a.calories) ? Math.max(0, a.calories) : 0;
+  return tracked + liftCalsOf(k);
 }
 const eatenOf = k => dayOf(k).entries.reduce((sum, e) => sum + e.calories * (e.qty || 1), 0);
 const targetOf = () => state.settings.dailyTarget;
@@ -265,7 +274,11 @@ function renderActivityAndLists(s) {
   const act = dayOf(cursor).activity;
   $('#activityInput').value = act ? act.calories : '';
   $('#activitySource').textContent = !act ? 'not set' : (act.source === 'samsung' ? 'Samsung Health' : 'manual');
+  const lift = liftOf(cursor);
+  document.querySelectorAll('#liftSeg button').forEach(b =>
+    b.setAttribute('aria-pressed', String((b.dataset.lift || null) === lift)));
   $('#activityNote').textContent =
+    (lift ? `+${kcal(LIFT_KCAL[lift])} for ${LIFT_LABEL[lift]} (${kcal(s.active)} total). ` : '') +
     `Counts toward the day's net only — your target stays ${kcal(s.target)}.`;
 
   renderWeightCard();
@@ -417,6 +430,11 @@ function buildEditRow(e) {
   li.append(form);
   setTimeout(() => { name.focus(); name.select(); }, 0);
   return li;
+}
+
+function setLift(kind) {
+  mutateDay(cursor, d => { if (LIFT_KCAL[kind]) d.lift = kind; else delete d.lift; });
+  render();
 }
 
 function setActivity(cals, source) {
@@ -2028,6 +2046,10 @@ $('#activityInput').onchange = e => {
   const v = Number(e.target.value);
   setActivity(Number.isFinite(v) ? v : 0, 'manual');
 };
+
+document.querySelectorAll('#liftSeg button').forEach(b => {
+  b.onclick = () => setLift(b.dataset.lift || null);
+});
 
 // Weight — commit on change, like activity. Clearing the box removes it.
 $('#weightInput').onchange = e => {

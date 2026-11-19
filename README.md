@@ -19,6 +19,12 @@ Activity never changes it. The day's net deficit, including activity, is
 shown in smaller type under the calories remaining, as context rather than
 a number to eat back.
 
+The Activity card has a **None / Legs / Upper** toggle for lifting days
+(none by default). Leg day adds 250 kcal and upper body 175 kcal to that day's
+activity, on top of the number in the box, so it gets the same 0.75 share as
+the rest of activity. It is stored separately (`day.lift`), so a Samsung
+import refreshing the box doesn't clear it.
+
 The **Week** view tracks the same net. Only three quarters of activity
 counts, to allow for wearables overestimating burn; the share is editable in
 Settings. The dashed line on the chart is each day's allowance, so a bar
