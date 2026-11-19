@@ -4,7 +4,8 @@
 'use strict';
 
 const KEY = 'calorie-tracker/v1';
-const DEFAULTS = { dailyTarget: 2550, maintenance: 2600, activityFactor: 0.75, weekStart: 1, weightUnit: 'kg' };
+const DEFAULTS = { dailyTarget: 2550, maintenance: 2600, activityFactor: 0.75, weekStart: 1, weightUnit: 'kg',
+  startKg: 113, startDate: '2026-10-26' };
 const WEIGHT_UNITS = ['kg', 'lb', 'st'];
 
 /* The target is one fixed number. Older saves (and older devices still
@@ -21,7 +22,9 @@ function cleanSettings(s) {
     maintenance: Number.isFinite(m) && m > 0 ? m : DEFAULTS.maintenance,
     activityFactor: Number.isFinite(f) && f >= 0 && f <= 2 ? f : DEFAULTS.activityFactor,
     weekStart: w === 0 || w === 1 ? w : DEFAULTS.weekStart,
-    weightUnit: WEIGHT_UNITS.includes(src.weightUnit) ? src.weightUnit : DEFAULTS.weightUnit
+    weightUnit: WEIGHT_UNITS.includes(src.weightUnit) ? src.weightUnit : DEFAULTS.weightUnit,
+    startKg: Number(src.startKg) >= 20 && Number(src.startKg) <= 350 ? Number(src.startKg) : DEFAULTS.startKg,
+    startDate: /^\d{4}-\d{2}-\d{2}$/.test(src.startDate) ? src.startDate : DEFAULTS.startDate
   };
 }
 
@@ -529,24 +532,23 @@ function setWeight(kg, source) {
   render();
 }
 
-/* Smoothed trend: an exponentially weighted moving average, 10% per day.
-   Day-to-day scale readings swing a kilo or more on water and food in the
-   gut; the trend is what fat loss actually looks like. A gap of g days
-   applies g days' worth of weighting, so sparse weigh-ins aren't treated as
-   if they were consecutive. */
-const TREND_ALPHA = 0.1;
-function withTrend(points) {
-  let t = null, prev = null;
-  return points.map(p => {
-    if (t === null) t = p.kg;
-    else {
-      const gap = Math.max(1, Math.round((parseKey(p.key) - parseKey(prev)) / 864e5));
-      t += (1 - Math.pow(1 - TREND_ALPHA, gap)) * (p.kg - t);
-    }
-    prev = p.key;
-    return Object.assign({ trend: t }, p);
-  });
+/* What the calorie log says you should weigh: the starting weight (Settings)
+   minus every logged day's net since the start date, at 7700 kcal per kg.
+   The value for day D is the morning weigh-in, so it counts the nets of the
+   days before D, not D itself. Unlogged days count as zero rather than as
+   a full deficit, so gaps in the log make this read high, never low. */
+function expectedWeights(toKey) {
+  const { startKg, startDate } = state.settings;
+  const out = [];
+  let kg = startKg, logged = 0;
+  for (let k = startDate; k <= toKey; k = addDays(k, 1)) {
+    out.push({ key: k, kg, logged });
+    const s = summaryOf(k);
+    if (s.logged) { kg += s.net / KCAL_PER_KG; logged++; }
+  }
+  return out;
 }
+const expectedOn = k => { const e = expectedWeights(k); return e.length ? e[e.length - 1] : null; };
 
 /* Least-squares line through the raw readings: slope in kg per day. Used for
    "change" and "rate" because, unlike the moving average, it doesn't lag a
@@ -575,7 +577,7 @@ function renderWeightCard() {
   if (document.activeElement !== input) input.value = w ? weightToInput(w.kg) : '';
   $('#weightSource').textContent = !w ? 'not set' : weightSourceLabel(w.source);
 
-  const all = withTrend(allWeights());
+  const all = allWeights();
   const before = all.filter(p => p.key < cursor).pop();
   const here = all.find(p => p.key === cursor);
   const bits = [];
@@ -586,7 +588,8 @@ function renderWeightCard() {
       : `Last: ${fmtWeight(before.kg)} on ${fmtShort(before.key)}`);
   }
   const ref = here || before;
-  if (ref && all.length > 2) bits.push(`trend ${fmtWeight(ref.trend)}`);
+  const exp = ref && expectedOn(ref.key);
+  if (exp) bits.push(`deficits say ${fmtWeight(exp.kg)}`);
   $('#weightNote').textContent = bits.length ? bits.join(' · ')
     : 'Weigh at the same time each day — first thing in the morning is most consistent.';
 }
@@ -601,7 +604,7 @@ function renderWeight() {
   document.querySelectorAll('#wtRange button').forEach(b =>
     b.setAttribute('aria-pressed', String(b.dataset.range === weightRange)));
 
-  const all = withTrend(allWeights());
+  const all = allWeights();
   $('#wtEmptyState').hidden = all.length > 0;
   $('#wtBody').hidden = all.length === 0;
   if (!all.length) return;
@@ -613,8 +616,12 @@ function renderWeight() {
 
   $('#wtLatest').textContent = fmtWeight(last.kg, { unit: wUnit() !== 'st' });
   $('#wtLatestSub').textContent = relativeLabel(last.key) === 'Today' ? 'today' : fmtShort(last.key);
-  $('#wtTrend').textContent = all.length > 2 ? fmtWeight(last.trend, { unit: wUnit() !== 'st' }) : '—';
-  $('#wtTrendSub').textContent = all.length > 2 ? 'smoothed · ' + (wUnit() === 'st' ? 'st lb' : wUnit()) : 'needs 3+ weigh-ins';
+  // Expected as of the latest weigh-in, so the two cards compare like for like.
+  const exp = expectedOn(last.key);
+  $('#wtExpected').textContent = exp ? fmtWeight(exp.kg, { unit: wUnit() !== 'st' }) : '—';
+  $('#wtExpectedSub').textContent = exp
+    ? `${fmtWeightDelta(exp.kg - state.settings.startKg)} since ${fmtShort(state.settings.startDate)} · scale ${fmtWeightDelta(last.kg - exp.kg)} vs this`
+    : `starts ${fmtShort(state.settings.startDate)}`;
 
   const fit = fitLine(pts);
   /* A week-long window can't hold a 7-day spread (first to last is at most
@@ -636,14 +643,14 @@ function renderWeight() {
   $('#wtRate').textContent = enough ? fmtWeightDelta(rate) : '—';
   $('#wtRateSub').textContent = enough && short ? 'per week · rough, water swings' : 'per week';
 
-  renderWeightChart(pts, start, t);
+  renderWeightChart(pts, expectedWeights(t).filter(e => e.key >= start), start, t);
   renderWeightCompare(pts, fit, enough);
   renderWeightList(pts);
 }
 
 /* Drawn at the box's real pixel width (re-rendered on resize), so the dots
    stay round and the labels stay text-sized on any screen. */
-function renderWeightChart(pts, start, end) {
+function renderWeightChart(pts, exp, start, end) {
   const box = $('#wtChart');
   box.textContent = '';
   const W = Math.max(260, box.clientWidth || 320), H = 190;
@@ -651,7 +658,7 @@ function renderWeightChart(pts, start, end) {
   const lb = wUnit() !== 'kg';
   const conv = kg => lb ? kg * LB_PER_KG : kg;
 
-  const vals = pts.flatMap(p => [conv(p.kg), conv(p.trend)]);
+  const vals = [...pts, ...exp].map(p => conv(p.kg));
   let lo = Math.min(...vals), hi = Math.max(...vals);
   if (hi - lo < 2) { const mid = (hi + lo) / 2; lo = mid - 1; hi = mid + 1; }
   const step = (wUnit() === 'st' ? [1, 2, 7, 14, 28] : [0.5, 1, 2, 5, 10, 20]).find(s => (hi - lo) / s <= 5) || 50;
@@ -681,15 +688,25 @@ function renderWeightChart(pts, start, end) {
   [[start, 'start'], [mid, 'middle'], [end, 'end']].forEach(([k, anchor]) =>
     svg.append(mk('text', { x: x(k), y: H - 6, class: 'wt-axis', 'text-anchor': anchor }, fmtShort(k))));
 
+  // Expected first, so the scale line sits on top where they cross.
+  if (exp.length > 1) {
+    svg.append(mk('polyline', { class: 'wt-exp',
+      points: exp.map(p => `${x(p.key).toFixed(1)},${y(conv(p.kg)).toFixed(1)}`).join(' ') }));
+  }
+  if (exp.length && exp[0].key === state.settings.startDate) {
+    const c = mk('circle', { cx: x(exp[0].key), cy: y(conv(exp[0].kg)), r: 3.5, class: 'wt-start' });
+    c.append(mk('title', {}, `Start: ${fmtWeight(exp[0].kg)} on ${fmtLong(exp[0].key)}`));
+    svg.append(c);
+  }
+  if (pts.length > 1) {
+    svg.append(mk('polyline', { class: 'wt-line',
+      points: pts.map(p => `${x(p.key).toFixed(1)},${y(conv(p.kg)).toFixed(1)}`).join(' ') }));
+  }
   pts.forEach(p => {
     const c = mk('circle', { cx: x(p.key), cy: y(conv(p.kg)), r: pts.length > 120 ? 2 : 3, class: 'wt-dot' });
     c.append(mk('title', {}, `${fmtLong(p.key)}: ${fmtWeight(p.kg)}`));
     svg.append(c);
   });
-  if (pts.length > 1) {
-    svg.append(mk('polyline', { class: 'wt-line',
-      points: pts.map(p => `${x(p.key).toFixed(1)},${y(conv(p.trend)).toFixed(1)}`).join(' ') }));
-  }
   box.append(svg);
 }
 
@@ -1903,6 +1920,9 @@ function renderSettings() {
   $('#setTarget').value = state.settings.dailyTarget;
   $('#setMaint').value = state.settings.maintenance;
   $('#setFactor').value = state.settings.activityFactor;
+  $('#setStartKg').value = weightToInput(state.settings.startKg);
+  $('#setStartKgLabel').textContent = `Starting weight (${wUnit() === 'st' ? 'st lb' : wUnit()})`;
+  $('#setStartDate').value = state.settings.startDate;
   $('#setWeekStart').value = String(state.settings.weekStart);
   $('#setWeightUnit').value = state.settings.weightUnit;
 }
@@ -2098,6 +2118,15 @@ $('#setMaint').onchange = e => {
 $('#setFactor').onchange = e => {
   const v = Number(e.target.value);
   if (Number.isFinite(v) && v >= 0 && v <= 2) { state.settings.activityFactor = v; state.settingsU = Date.now(); save(); queuePush(); }
+  render();
+};
+$('#setStartKg').onchange = e => {
+  const kg = parseWeightInput(e.target.value);
+  if (sensibleKg(kg)) { state.settings.startKg = Math.round(kg * 100) / 100; state.settingsU = Date.now(); save(); queuePush(); }
+  render();
+};
+$('#setStartDate').onchange = e => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) { state.settings.startDate = e.target.value; state.settingsU = Date.now(); save(); queuePush(); }
   render();
 };
 $('#setWeekStart').onchange = e => {
